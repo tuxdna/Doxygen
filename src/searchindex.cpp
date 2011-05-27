@@ -22,6 +22,7 @@
 #include <qfile.h>
 #include <ctype.h>
 #include <qregexp.h>
+#include <fstream>
 
 
 // file format: (all multi-byte values are stored in big endian format)
@@ -304,4 +305,72 @@ void SearchIndex::write(const char *fileName)
   delete[] urlOffsets;
   delete[] wordStatOffsets;
 }
+
+void SearchIndex::write_text_entries(
+				     const char *wordlistFilename,
+				     const char *urllistFilename,
+				     const char *wordurlmappingFilename
+				     )
+{
+
+    // write urls list
+    QIntDictIterator<URL> udi(m_urls);
+    URL *url;
+
+    std::ofstream of_url(urllistFilename, std::ofstream::binary);
+    int url_id = 0;
+    for (udi.toFirst();(url=udi.current());++udi)
+    {
+        // write url entry
+        of_url << url_id << ",\""
+               << url->name << "\",\""
+               << url->url << "\""
+               << std::endl
+                  ;
+        url_id ++;
+    }
+    of_url.close();
+
+
+    // write word list
+    QDictIterator<IndexWord> wdi(m_words);
+
+    std::ofstream of_words(wordlistFilename, std::ofstream::binary);
+    std::ofstream of_word_url(wordurlmappingFilename, std::ofstream::binary);
+    int word_id = 0;
+    for (wdi.toFirst(); wdi.current(); ++wdi)
+    {
+        const char * word;
+        IndexWord *index_word_ptr;
+
+        word = wdi.currentKey();
+        index_word_ptr = wdi.current();
+
+        // write word entry
+        of_words << word_id << ",\""
+                 << word << "\""
+                 << std::endl
+                    ;
+
+        // write word url mapping
+        QIntDictIterator<URLInfo> uli(index_word_ptr->urls());
+        for (uli.toFirst();uli.current();++uli)
+	{
+            URLInfo *ui = uli.current();
+
+            // write an entry of word-url mapping
+            of_word_url
+                    << word_id << ","
+                    << ui->urlIdx << ","
+                    << ui->freq
+                    << std::endl
+                       ;
+	}
+
+        word_id ++;
+    }
+    of_word_url.close();
+    of_words.close();
+}
+
 

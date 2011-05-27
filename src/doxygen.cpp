@@ -10850,6 +10850,11 @@ void generateOutput()
     msg("Generating search index\n");
     HtmlGenerator::writeSearchPage();
     Doxygen::searchIndex->write(Config_getString("HTML_OUTPUT")+"/search/search.idx");
+    Doxygen::searchIndex->write_text_entries(
+					     Config_getString("HTML_OUTPUT")+"/search/wordlist.txt",
+					     Config_getString("HTML_OUTPUT")+"/search/urlllist.txt",
+					     Config_getString("HTML_OUTPUT")+"/search/word_url_mapping.txt"
+					     );
   }
 
   if (Config_getBool("GENERATE_RTF"))

@@ -60,6 +60,11 @@ class SearchIndex
     void setCurrentDoc(const char *name,const char *baseName,const char *anchor=0);
     void addWord(const char *word,bool hiPriority,bool recurse=FALSE);
     void write(const char *file);
+    void write_text_entries(
+			    const char *wordlistFilename,
+			    const char *urllistFilename,
+			    const char *wordurlmappingFilename
+			    );
   private:
     QDict<IndexWord> m_words;
     QVector< QList<IndexWord> > m_index;

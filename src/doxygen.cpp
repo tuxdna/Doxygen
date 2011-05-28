@@ -10700,7 +10700,7 @@ void generateOutput()
     Doxygen::searchIndex->write(Config_getString("HTML_OUTPUT")+"/search/search.idx");
     Doxygen::searchIndex->write_text_entries(
 					     Config_getString("HTML_OUTPUT")+"/search/wordlist.txt",
-					     Config_getString("HTML_OUTPUT")+"/search/urlllist.txt",
+                                             Config_getString("HTML_OUTPUT")+"/search/urllist.txt",
 					     Config_getString("HTML_OUTPUT")+"/search/word_url_mapping.txt"
 					     );
   }

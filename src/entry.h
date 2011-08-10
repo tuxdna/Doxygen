@@ -311,6 +311,7 @@ class Entry
   public:
 
     // identification
+    int id; // identifier for corresponding record in entry database
     int          section;     //!< entry type (see Sections);
     QCString	 type;        //!< member type 
     QCString	 name;        //!< member name
@@ -394,11 +395,30 @@ class Entry
       }
     }
 
+
+    void set_parent_id(int parent_id) {
+    	this->parent_id = parent_id;
+    }
+
+    int get_parent_id() const {
+
+    	if(this->parent_id > 0) {
+    		return this->parent_id;
+    	}
+
+    	Entry *pe = this->parent();
+    	if(pe) {
+    		return pe->id;
+    	}
+    	return -1;
+    }
+
   private:  
     void createSubtreeIndex(EntryNav *nav,FileStorage *storage,FileDef *fd);
     Entry         *m_parent;    //!< parent node in the tree
     QList<Entry>  *m_sublist;   //!< entries that are children of this one
     Entry &operator=(const Entry &); 
+    int parent_id; // identifier for corresponding parent record in entry database
 };
 
 class EntryNav
@@ -423,6 +443,8 @@ class EntryNav
     const QList<EntryNav> *children() const { return m_subList; }
     EntryNav *parent() const { return m_parent; }
     FileDef *fileDef() const { return m_fileDef; }
+    int64 get_m_offset() const { return m_offset; }
+    int get_entry_id() const { return entry_id; }
 
   private:
 
@@ -439,6 +461,7 @@ class EntryNav
     SrcLangExt   m_lang;         //!< programming language in which this entry was found
 
     Entry       *m_info;
+    int          entry_id;
     int64        m_offset;
     bool         m_noLoad;
 };

@@ -234,6 +234,7 @@ SOURCES      =	ce_lex.cpp \
 		scanner.cpp \
 		searchindex.cpp \
                 store.cpp \
+                sqlite3store.cpp \
 		tagreader.cpp \
                 textdocvisitor.cpp \
 		translator.cpp \

@@ -22,6 +22,7 @@
 #include "util.h"
 #include "section.h"
 #include "doxygen.h"
+#include "sqlite3store.h"
 
 //------------------------------------------------------------------
 
@@ -48,11 +49,19 @@ bool ArgumentList::hasDocumentation() const
 
 int Entry::num=0;
 
+static int next_id = 0;
+int get_next_entry_id() {
+	next_id ++;
+	return next_id;
+}
+
 Entry::Entry()
 {
   //printf("Entry::Entry(%p)\n",this);
   num++;
   m_parent=0;
+  id = get_next_entry_id();
+  parent_id = -1;
   section = EMPTY_SEC;
   m_sublist = new QList<Entry>;
   m_sublist->setAutoDelete(TRUE);
@@ -79,6 +88,8 @@ Entry::Entry(const Entry &e)
 {
   //printf("Entry::Entry(%p):copy\n",this);
   num++;
+  id = e.id;
+  parent_id = e.get_parent_id();
   section     = e.section;
   type        = e.type;
   name        = e.name;
@@ -366,7 +377,7 @@ void Entry::addSpecialListItem(const char *listName,int itemId)
 EntryNav::EntryNav(EntryNav *parent, Entry *e)
              : m_parent(parent), m_subList(0), m_section(e->section), m_type(e->type),
               m_name(e->name), m_fileDef(0), m_lang(e->lang), 
-              m_info(0), m_offset(-1), m_noLoad(FALSE) 
+	       m_info(0),  entry_id(-1), m_offset(-1),  m_noLoad(FALSE)
 {
   if (e->tagInfo)
   {
@@ -412,11 +423,15 @@ bool EntryNav::loadEntry(FileStorage *storage)
   {
     return TRUE;
   }
+
+  /*
   if (m_offset==-1) 
   {
     //printf("offset not set!\n");
     return FALSE;
   }
+  */
+
   //delete m_info;
   //printf("EntryNav::loadEntry: new entry %p: %s\n",m_info,m_name.data());
   //m_info->tagInfo = m_tagInfo;
@@ -426,24 +441,46 @@ bool EntryNav::loadEntry(FileStorage *storage)
   //}
   //m_info->parent = 0;
   //printf("load entry: seek to %llx\n",m_offset);
+
+  /*
+   *
   if (!storage->seek(m_offset)) 
   {
     //printf("seek failed!\n");
     return FALSE;
   }
+   */
+
+  if(get_entry_id() <= 0) {
+      return FALSE;
+  }
+
   if (m_info)  delete m_info;
-  m_info = unmarshalEntry(storage);
+  // m_info = unmarshalEntry(storage);
+  Sqlite3Store *store = Sqlite3Store::instance();
+  m_info = store->loadEntry(get_entry_id());
   m_info->name = m_name;
   m_info->type = m_type;
   m_info->section = m_section;
+
+
   return TRUE;
 }
 
 bool EntryNav::saveEntry(Entry *e,FileStorage *storage)
 {
   m_offset = storage->pos();
-  //printf("EntryNav::saveEntry offset=%llx\n",m_offset);
-  marshalEntry(storage,e);
+
+  // set entry id for later loading of entries from data store
+  entry_id = e->id;
+
+  printf("EntryNav::saveEntry offset=%llx, entry_id=%d\n",m_offset, entry_id);
+  //marshalEntry(storage,e);
+
+  // Obtain store ( singleton instance )
+  Sqlite3Store *store = Sqlite3Store::instance();
+  store->saveEntry(e);
+
   return TRUE;
 }
 

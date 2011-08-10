@@ -78,6 +78,7 @@
 #include "vhdlscanner.h"
 #include "vhdldocgen.h"
 #include "eclipsehelp.h"
+#include "sqlite3store.h"
 
 #include "layout.h"
 
@@ -482,6 +483,34 @@ static void addRelatedPage(EntryNav *rootNav)
   {
     pd->addSectionsToDefinition(root->anchors);
     addPageToContext(pd,rootNav);
+  }
+}
+
+static void traverseEntryNavTree(EntryNav *rootNav, int level, int childnum)
+{
+
+  printf("%d:%d:%lld:%d=>%s:%s\n", level, childnum, rootNav->get_m_offset(),
+	 rootNav->get_entry_id(), rootNav->name().data(),
+	 rootNav->type().data());
+  
+  if(rootNav->get_entry_id() > 0) {
+    Entry *tmp_entry = NULL;
+    Sqlite3Store *store = Sqlite3Store::instance();
+    tmp_entry = store->loadEntry(rootNav->get_entry_id());
+    store->printEntry(tmp_entry);
+    delete tmp_entry;
+  }
+  
+  if (rootNav->children()) {
+    level ++;
+    EntryNavListIterator eli(*rootNav->children());
+    EntryNav *e;
+    int cnum = 0;
+    for (;(e=eli.current());++eli) {
+      cnum ++;
+      traverseEntryNavTree(e, level, cnum);
+      //buildGroupListFiltered(e,additional,includeExternal);
+    }
   }
 }
 
@@ -10211,6 +10240,8 @@ void parseInput()
   /**************************************************************************
    *             Gather information                                         * 
    **************************************************************************/
+  //traverseEntryNavTree(rootNav, 1, 0);
+  //exit(-1);
   
   msg("Building group list...\n");
   buildGroupList(rootNav);

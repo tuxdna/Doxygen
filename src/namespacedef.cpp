@@ -2,7 +2,7 @@
  *
  * 
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -564,12 +564,7 @@ void NamespaceDef::writeDocumentation(OutputList &ol)
 
   ol.endContents();
 
-  if (generateTreeView)
-  {
-    writeNavigationPath(ol);
-  }
-
-  endFile(ol,TRUE);
+  endFileWithNavPath(this,ol);
 
   if (generateTagFile)
   {
@@ -596,7 +591,7 @@ void NamespaceDef::writeMemberPages(OutputList &ol)
   {
     if (ml->listType()&MemberList::documentationLists)
     {
-      ml->writeDocumentationPage(ol,name(),this);
+      ml->writeDocumentationPage(ol,displayName(),this);
     }
   }
   ol.popGeneratorState();
@@ -633,7 +628,7 @@ void NamespaceDef::writeQuickMemberLinks(OutputList &ol,MemberDef *currentMd) co
           if (createSubDirs) ol.writeString("../../");
           ol.writeString(md->getOutputFileBase()+Doxygen::htmlFileExtension+"#"+md->anchor());
           ol.writeString("\">");
-          ol.writeString(md->localName());
+          ol.writeString(convertToHtml(md->localName()));
           ol.writeString("</a>");
         }
         ol.writeString("</td></tr>\n");
@@ -813,7 +808,12 @@ bool NamespaceSDict::declVisible() const
 
 void NamespaceSDict::writeDeclaration(OutputList &ol,const char *title,bool localName)
 {
+ 
+
   if (count()==0) return; // no namespaces in the list
+
+  if (Config_getBool("OPTIMIZE_OUTPUT_VHDL")) return;
+ 
 
   SDict<NamespaceDef>::Iterator ni(*this);
   NamespaceDef *nd;
@@ -836,7 +836,7 @@ void NamespaceSDict::writeDeclaration(OutputList &ol,const char *title,bool loca
     if (nd->isLinkable())
     {
       SrcLangExt lang = nd->getLanguage();
-      ol.startMemberItem(0);
+      ol.startMemberItem(nd->getOutputFileBase(),0);
       if (lang==SrcLangExt_Java || lang==SrcLangExt_CSharp)
       {
         ol.docify("package ");
@@ -867,8 +867,8 @@ void NamespaceSDict::writeDeclaration(OutputList &ol,const char *title,bool loca
       ol.endMemberItem();
       if (!nd->briefDescription().isEmpty() && Config_getBool("BRIEF_MEMBER_DESC"))
       {
-        ol.startMemberDescription();
-        ol.parseDoc(nd->briefFile(),nd->briefLine(),nd,0,nd->briefDescription(),FALSE,FALSE);
+        ol.startMemberDescription(nd->getOutputFileBase());
+        ol.parseDoc(nd->briefFile(),nd->briefLine(),nd,0,nd->briefDescription(),FALSE,FALSE,0,TRUE);
         ol.endMemberDescription();
       }
     }
@@ -950,7 +950,7 @@ void NamespaceDef::writeMemberDeclarations(OutputList &ol,MemberList::ListType l
 void NamespaceDef::writeMemberDocumentation(OutputList &ol,MemberList::ListType lt,const QCString &title)
 {
   MemberList * ml = getMemberList(lt);
-  if (ml) ml->writeDocumentation(ol,name(),this,title);
+  if (ml) ml->writeDocumentation(ol,displayName(),this,title);
 }
 
 

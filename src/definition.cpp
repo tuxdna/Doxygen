@@ -2,7 +2,7 @@
  *
  * 
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -37,6 +37,7 @@
 #include "parserintf.h"
 #include "marshal.h"
 #include "debug.h"
+#include "vhdldocgen.h"
 
 #define START_MARKER 0x4445465B // DEF[
 #define END_MARKER   0x4445465D // DEF]
@@ -48,8 +49,7 @@ class DefinitionImpl
   public:
     DefinitionImpl();
    ~DefinitionImpl();
-    void init(const char *df,int dl,
-         const char *n);
+    void init(const char *df, const char *n);
 
     SectionDict *sectionDict;  // dictionary of all sections, not accessible
 
@@ -76,7 +76,6 @@ class DefinitionImpl
 
     // where the item was found
     QCString defFileName;
-    int      defLine;
     QCString defFileExt;
 
     SrcLangExt lang;
@@ -103,8 +102,7 @@ DefinitionImpl::~DefinitionImpl()
   delete inbodyDocs;
 }
 
-void DefinitionImpl::init(const char *df,int dl,
-                          const char *n)
+void DefinitionImpl::init(const char *df, const char *n)
 {
   defFileName = df;
   int lastDot = defFileName.findRev('.');
@@ -112,7 +110,6 @@ void DefinitionImpl::init(const char *df,int dl,
   {
     defFileExt = defFileName.mid(lastDot);
   }
-  defLine = dl;
   QCString name = n;
   if (name!="<globalScope>") 
   {
@@ -280,8 +277,9 @@ Definition::Definition(const char *df,int dl,
                        const char *d,bool isSymbol)
 {
   m_name = name;
+  m_defLine = dl;
   m_impl = new DefinitionImpl;
-  m_impl->init(df,dl,name);
+  m_impl->init(df,name);
   m_isSymbol = isSymbol;
   if (isSymbol) addToMap(name,this);
   _setBriefDescription(b,df,dl);
@@ -322,10 +320,11 @@ void Definition::addSectionsToDefinition(QList<SectionInfo> *anchorList)
     //printf("Add section `%s' to definition `%s'\n",
     //    si->label.data(),name().data());
     SectionInfo *gsi=Doxygen::sectionDict.find(si->label);
+    //printf("===== label=%s gsi=%p\n",si->label.data(),gsi);
     if (gsi==0)
     {
       gsi = new SectionInfo(*si);
-      Doxygen::sectionDict.insert(si->label,gsi);
+      Doxygen::sectionDict.append(si->label,gsi);
     }
     if (m_impl->sectionDict==0) 
     {
@@ -333,11 +332,130 @@ void Definition::addSectionsToDefinition(QList<SectionInfo> *anchorList)
     }
     if (m_impl->sectionDict->find(gsi->label)==0)
     {
-      m_impl->sectionDict->insert(gsi->label,gsi);
+      m_impl->sectionDict->append(gsi->label,gsi);
       gsi->definition = this;
     }
     si=anchorList->next();
   }
+}
+
+bool Definition::hasSections() const
+{
+  makeResident();
+  //printf("Definition::hasSections(%s) #sections=%d\n",name().data(),
+  //    m_impl->sectionDict ? m_impl->sectionDict->count() : 0);
+  if (m_impl->sectionDict==0) return FALSE;
+  SDict<SectionInfo>::Iterator li(*m_impl->sectionDict);
+  SectionInfo *si;
+  for (li.toFirst();(si=li.current());++li)
+  {
+    if (si->type==SectionInfo::Section || 
+        si->type==SectionInfo::Subsection || 
+        si->type==SectionInfo::Subsubsection ||
+        si->type==SectionInfo::Paragraph)
+    {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+void Definition::addSectionsToIndex()
+{
+  makeResident();
+  if (m_impl->sectionDict==0) return;
+  //printf("Definition::addSectionsToIndex()\n");
+  SDict<SectionInfo>::Iterator li(*m_impl->sectionDict);
+  SectionInfo *si;
+  int level=1;
+  for (li.toFirst();(si=li.current());++li)
+  {
+    if (si->type==SectionInfo::Section       || 
+        si->type==SectionInfo::Subsection    || 
+        si->type==SectionInfo::Subsubsection ||
+        si->type==SectionInfo::Paragraph)
+    {
+      //printf("  level=%d title=%s\n",level,si->title.data());
+      int nextLevel = (int)si->type;
+      if (nextLevel>level)
+      {
+        Doxygen::indexList.incContentsDepth();
+      }
+      else if (nextLevel<level)
+      {
+        Doxygen::indexList.decContentsDepth();
+      }
+      Doxygen::indexList.addContentsItem(TRUE,si->title,
+                                         getReference(),
+                                         getOutputFileBase(),
+                                         si->label,
+                                         FALSE,
+                                         TRUE);
+      level = nextLevel;
+    }
+  }
+  while (level>1)
+  {
+    Doxygen::indexList.decContentsDepth();
+    level--;
+  }
+}
+
+void Definition::writeToc(OutputList &ol)
+{
+  makeResident();
+  if (m_impl->sectionDict==0) return;
+  ol.pushGeneratorState();
+  ol.disableAllBut(OutputGenerator::Html);
+  ol.writeString("<div class=\"toc\">");
+  ol.writeString("<h3>");
+  ol.writeString(theTranslator->trRTFTableOfContents());
+  ol.writeString("</h3>\n");
+  ol.writeString("<ul>");
+  SDict<SectionInfo>::Iterator li(*m_impl->sectionDict);
+  SectionInfo *si;
+  int level=1;
+  char cs[2];
+  cs[1]='\0';
+  bool inLi[5]={ FALSE, FALSE, FALSE, FALSE };
+  for (li.toFirst();(si=li.current());++li)
+  {
+    if (si->type==SectionInfo::Section       || 
+        si->type==SectionInfo::Subsection    || 
+        si->type==SectionInfo::Subsubsection ||
+        si->type==SectionInfo::Paragraph)
+    {
+      //printf("  level=%d title=%s\n",level,si->title.data());
+      int nextLevel = (int)si->type;
+      if (nextLevel>level)
+      {
+        ol.writeString("<ul>");
+      }
+      else if (nextLevel<level)
+      {
+        if (inLi[level]) ol.writeString("</li>\n");
+        inLi[level]=FALSE;
+        ol.writeString("</ul>\n");
+      }
+      cs[0]='0'+nextLevel;
+      if (inLi[nextLevel]) ol.writeString("</li>\n");
+      ol.writeString("<li class=\"level"+QCString(cs)+"\"><a href=\"#"+si->label+"\">"+si->title+"</a>");
+      inLi[nextLevel]=TRUE;
+      level = nextLevel;
+    }
+  }
+  while (level>1)
+  {
+    if (inLi[level]) ol.writeString("</li>\n");
+    inLi[level]=FALSE;
+    ol.writeString("</ul>\n");
+    level--;
+  }
+  if (inLi[level]) ol.writeString("</li>\n");
+  inLi[level]=FALSE;
+  ol.writeString("</ul>\n");
+  ol.writeString("</div>\n");
+  ol.popGeneratorState();
 }
 
 void Definition::writeDocAnchorsToTagFile()
@@ -346,7 +464,7 @@ void Definition::writeDocAnchorsToTagFile()
   if (!Config_getString("GENERATE_TAGFILE").isEmpty() && m_impl->sectionDict)
   {
     //printf("%s: writeDocAnchorsToTagFile(%d)\n",name().data(),m_sectionDict->count());
-    QDictIterator<SectionInfo> sdi(*m_impl->sectionDict);
+    SDict<SectionInfo>::Iterator sdi(*m_impl->sectionDict);
     SectionInfo *si;
     for (;(si=sdi.current());++sdi)
     {
@@ -618,7 +736,7 @@ static bool readCodeFragment(const char *fileName,
           cn=fgetc(f);
           if (cn!=':') found=TRUE;
         }
-        else if (c=='{')
+        else if (c=='{')   // } so vi matching brackets has no problem
         {
           found=TRUE;
         }
@@ -682,6 +800,8 @@ static bool readCodeFragment(const char *fileName,
     if (usePipe) 
     {
       portable_pclose(f); 
+      Debug::print(Debug::FilterOutput, 0, "Filter output\n");
+      Debug::print(Debug::FilterOutput,0,"-------------\n%s\n-------------\n",result.data());
     }
     else 
     {
@@ -867,6 +987,14 @@ void Definition::writeInlineCode(OutputList &ol,const char *scopeName)
       //printf("Read:\n`%s'\n\n",codeFragment.data());
       MemberDef *thisMd = 0;
       if (definitionType()==TypeMember) thisMd = (MemberDef *)this;
+
+      // vhdl  parser can' t start at an arbitrary point in the source code
+      if(this->getLanguage()==SrcLangExt_VHDL)
+      {
+        if (thisMd) VhdlDocGen::writeCodeFragment(ol,actualStart,codeFragment,thisMd);
+        return;
+      }
+
       ol.startCodeFragment();
       pIntf->parseCode(ol,               // codeOutIntf
                        scopeName,        // scope
@@ -892,12 +1020,17 @@ void Definition::writeInlineCode(OutputList &ol,const char *scopeName)
 void Definition::_writeSourceRefList(OutputList &ol,const char *scopeName,
     const QCString &text,MemberSDict *members,bool /*funcOnly*/)
 {
+  LockingPtr<Definition> lock(this,this); // since this can be a memberDef 
+                                          // accessing other memberDefs prevent
+                                          // it from being flushed to disk
   static bool latexSourceCode = Config_getBool("LATEX_SOURCE_CODE"); 
   static bool sourceBrowser   = Config_getBool("SOURCE_BROWSER");
   static bool refLinkSource   = Config_getBool("REFERENCES_LINK_SOURCE");
   ol.pushGeneratorState();
   if (members)
   {
+    members->sort();
+
     ol.startParagraph();
     ol.parseText(text);
     ol.docify(" ");
@@ -1110,39 +1243,26 @@ void Definition::addInnerCompound(Definition *)
 
 QCString Definition::qualifiedName() const
 {
-  static int count=0;
-  count++;
+  //static int count=0;
+  //count++;
   makeResident();
   if (!m_impl->qualifiedName.isEmpty()) 
   {
-    count--;
+    //count--;
     return m_impl->qualifiedName;
   }
-#if 0
-  if (count>20)
-  {
-    printf("Definition::qualifiedName() Infinite recursion detected! Type=%d\n",definitionType());
-    printf("Trace:\n");
-    Definition *d = (Definition *)this;
-    for (int i=0;d && i<20;i++)
-    {
-      printf("  %s\n",d->name().data());
-      d = d->getOuterScope();
-    }
-  }
-#endif
   
   //printf("start %s::qualifiedName() localName=%s\n",name().data(),m_impl->localName.data());
   if (m_impl->outerScope==0) 
   {
     if (m_impl->localName=="<globalScope>") 
     {
-      count--;
+      //count--;
       return "";
     }
     else 
     {
-      count--;
+      //count--;
       return m_impl->localName; 
     }
   }
@@ -1153,10 +1273,12 @@ QCString Definition::qualifiedName() const
   }
   else
   {
-    m_impl->qualifiedName = m_impl->outerScope->qualifiedName()+"::"+m_impl->localName;
+    m_impl->qualifiedName = m_impl->outerScope->qualifiedName()+
+           getLanguageSpecificSeparator(getLanguage())+
+           m_impl->localName;
   }
   //printf("end %s::qualifiedName()=%s\n",name().data(),m_impl->qualifiedName.data());
-  count--;
+  //count--;
   return m_impl->qualifiedName;
 };
 
@@ -1351,6 +1473,10 @@ void Definition::writeNavigationPath(OutputList &ol) const
   {
     ol.writeString("</div>\n");
   }
+  //if (showSearchInfo)
+  //{
+  //  ol.writeSearchInfo();
+  //}
 
   ol.writeString("  <div id=\"nav-path\" class=\"navpath\">\n");
   ol.writeString("    <ul>\n");
@@ -1400,6 +1526,9 @@ QCString Definition::briefDescription() const
 QCString Definition::briefDescriptionAsTooltip() const
 {
   makeResident();
+  LockingPtr<Definition> lock(this,this); // since this can be a memberDef 
+                                          // accessing other memberDefs prevent
+                                          // it from being flushed to disk
   if (m_impl->brief)
   {
     if (m_impl->brief->tooltip.isEmpty() && !m_impl->brief->doc.isEmpty())
@@ -1468,12 +1597,6 @@ QCString Definition::getDefFileExtension() const
 { 
   makeResident();
   return m_impl->defFileExt; 
-}
-
-int Definition::getDefLine() const 
-{ 
-  makeResident();
-  return m_impl->defLine; 
 }
 
 bool Definition::isHidden() const
@@ -1559,12 +1682,8 @@ void Definition::setReference(const char *r)
 
 SrcLangExt Definition::getLanguage() const
 {
+  makeResident();
   return m_impl->lang;
-}
-
-void Definition::_setSymbolName(const QCString &name) 
-{ 
-  m_symbolName=name; 
 }
 
 void Definition::setHidden(bool b) 
@@ -1585,13 +1704,21 @@ void Definition::setLocalName(const QCString name)
   m_impl->localName=name; 
 }
 
+void Definition::setLanguage(SrcLangExt lang) 
+{ 
+  makeResident();
+  m_impl->lang=lang; 
+}
+
 void Definition::makeResident() const
 {
 }
 
-void Definition::setLanguage(SrcLangExt lang) 
+//---------------
+
+void Definition::_setSymbolName(const QCString &name) 
 { 
-  m_impl->lang=lang; 
+  m_symbolName=name; 
 }
 
 void Definition::flushToDisk() const
@@ -1617,7 +1744,6 @@ void Definition::flushToDisk() const
   marshalBool         (Doxygen::symbolStorage,m_impl->isArtificial);
   marshalObjPointer   (Doxygen::symbolStorage,m_impl->outerScope);
   marshalQCString     (Doxygen::symbolStorage,m_impl->defFileName);
-  marshalInt          (Doxygen::symbolStorage,m_impl->defLine);
   marshalQCString     (Doxygen::symbolStorage,m_impl->defFileExt);
   marshalInt          (Doxygen::symbolStorage,(int)m_impl->lang);
   marshalUInt(Doxygen::symbolStorage,END_MARKER);
@@ -1650,7 +1776,6 @@ void Definition::loadFromDisk() const
   m_impl->isArtificial    = unmarshalBool         (Doxygen::symbolStorage);
   m_impl->outerScope      = (Definition *)unmarshalObjPointer   (Doxygen::symbolStorage);
   m_impl->defFileName     = unmarshalQCString     (Doxygen::symbolStorage);
-  m_impl->defLine         = unmarshalInt          (Doxygen::symbolStorage);
   m_impl->defFileExt      = unmarshalQCString     (Doxygen::symbolStorage);
   m_impl->lang            = (SrcLangExt)unmarshalInt(Doxygen::symbolStorage);
   marker = unmarshalUInt(Doxygen::symbolStorage);

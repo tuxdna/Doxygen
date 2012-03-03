@@ -17,6 +17,7 @@ PageDef::PageDef(const char *f,int l,const char *n,
   m_subPageDict = new PageSDict(7);
   m_pageScope = 0;
   m_nestingLevel = 0;
+  m_showToc = FALSE;
 }
 
 PageDef::~PageDef()
@@ -77,8 +78,6 @@ void PageDef::writeDocumentation(OutputList &ol)
 
   //printf("PageDef::writeDocumentation: %s\n",getOutputFileBase().data());
 
-  startFile(ol,getOutputFileBase(),pageName,title(),HLI_Pages,!generateTreeView);
-
   ol.pushGeneratorState();
   //1.{ 
 
@@ -93,6 +92,8 @@ void PageDef::writeDocumentation(OutputList &ol)
     ol.enable(OutputGenerator::Man);
     ol.enable(OutputGenerator::Html);
   }
+
+  startFile(ol,getOutputFileBase(),pageName,title(),HLI_Pages,!generateTreeView);
 
   if (!generateTreeView)
   {
@@ -139,21 +140,25 @@ void PageDef::writeDocumentation(OutputList &ol)
   ol.popGeneratorState();
   //2.}
 
-  writePageDocumentation(ol);
+  if (m_showToc && hasSections())
+  {
+    writeToc(ol);
+  }
 
-  ol.popGeneratorState();
-  //1.}
+  writePageDocumentation(ol);
 
   if (generateTreeView && getOuterScope()!=Doxygen::globalScope && !Config_getBool("DISABLE_INDEX"))
   {
     ol.endContents();
-    getOuterScope()->writeNavigationPath(ol);
-    endFile(ol,TRUE);
+    endFileWithNavPath(getOuterScope(),ol);
   }
   else
   {
     endFile(ol);
   }
+
+  ol.popGeneratorState();
+  //1.}
 
   if (!Config_getString("GENERATE_TAGFILE").isEmpty())
   {
@@ -184,6 +189,13 @@ void PageDef::writeDocumentation(OutputList &ol)
 
 void PageDef::writePageDocumentation(OutputList &ol)
 {
+
+  bool markdownEnabled = Doxygen::markdownSupport;
+  if (getLanguage()==SrcLangExt_Markdown)
+  {
+    Doxygen::markdownSupport = TRUE;
+  }
+
   ol.startTextBlock();
   ol.parseDoc(
       docFile(),           // fileName
@@ -195,6 +207,8 @@ void PageDef::writePageDocumentation(OutputList &ol)
       FALSE                // not an example
       );
   ol.endTextBlock();
+
+  Doxygen::markdownSupport = markdownEnabled;
 
   if (hasSubPages())
   {
@@ -260,5 +274,10 @@ bool PageDef::hasSubPages() const
 void PageDef::setNestingLevel(int l)
 {
   m_nestingLevel = l;
+}
+
+void PageDef::setShowToc(bool b)
+{
+  m_showToc = b;
 }
 

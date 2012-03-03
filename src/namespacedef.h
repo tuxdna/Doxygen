@@ -2,7 +2,7 @@
  *
  * 
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -43,6 +43,7 @@ class NamespaceDef : public Definition
    ~NamespaceDef();
     DefType definitionType() const { return TypeNamespace; }
     QCString getOutputFileBase() const;
+    QCString anchor() const { return QCString(); }
     void insertUsedFile(const char *fname);
     
     void writeDocumentation(OutputList &ol);

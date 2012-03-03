@@ -2,7 +2,7 @@
  *
  * 
  *
- * Copyright (C) 1997-2011 by Parker Waechter & Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Parker Waechter & Dimitri van Heesch.
  *
  * Style sheet additions by Alexander Bartolich
  *
@@ -1571,7 +1571,7 @@ void RTFGenerator::endDescItem()
   newParagraph();
 }
 
-void RTFGenerator::startMemberDescription()
+void RTFGenerator::startMemberDescription(const char *)
 {
   DBG_RTF(t << "{\\comment (startMemberDescription)}"    << endl)
   t << "{" << endl;
@@ -1713,7 +1713,7 @@ void RTFGenerator::docify(const char *str)
   {
     const unsigned char *p=(const unsigned char *)str;
     unsigned char c;
-    unsigned char pc='\0';
+    //unsigned char pc='\0';
     while (*p)
     {
       //static bool MultiByte = FALSE;
@@ -1746,7 +1746,7 @@ void RTFGenerator::docify(const char *str)
             t << (char)c;
           }
       }
-      pc = c;
+      //pc = c;
       m_omitParagraph = FALSE;
     }
   }
@@ -1837,7 +1837,7 @@ void RTFGenerator::endClassDiagram(const ClassDiagram &d,
 //  t << text;
 //}
 
-void RTFGenerator::startMemberItem(int)
+void RTFGenerator::startMemberItem(const char *,int)
 {
   DBG_RTF(t <<"{\\comment startMemberItem }" << endl)
   t << rtf_Style_Reset << rtf_BList_DepthStyle() << endl; // set style to apropriate depth

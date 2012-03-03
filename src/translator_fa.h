@@ -2,7 +2,7 @@
  *
  * 
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -50,10 +50,10 @@ class TranslatorPersian : public TranslatorAdapter_1_7_5
 		const char * PersianDigits[] = { "۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹" };
 		for(unsigned i=0; i<str.length(); i++)
 		{
-			if (str[i] >= '0' && str[i] <= '9')
-				output += PersianDigits[ str[i] - '0' ];
+			if (str.at(i) >= '0' && str.at(i) <= '9')
+				output += PersianDigits[ str.at(i) - '0' ];
 			else
-				output += str[i];
+				output += str.at(i);
 		}
 		
 		return output;

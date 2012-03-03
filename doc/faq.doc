@@ -2,7 +2,7 @@
  *
  * 
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -252,6 +252,12 @@ in a configuration file from the command line (assuming a UNIX environment):
 
 \verbatim
 ( cat Doxyfile ; echo "PROJECT_NUMBER=1.0" ) | doxygen -
+\endverbatim
+
+For Windows the following would do the same:
+
+\verbatim
+( type Doxyfile & echo PROJECT_NUMBER=1.0 ) | doxygen.exe -
 \endverbatim
 
 If multiple options with the same name are specified then doxygen will use 

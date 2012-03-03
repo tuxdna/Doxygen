@@ -2,7 +2,7 @@
  *
  * 
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -13,9 +13,8 @@
  * Documents produced by Doxygen are derivative works derived from the
  * input used in their production; they are not affected by this license.
  *
- * The code is this file is largely based on a contribution from
- * Harm van der Heijden <H.v.d.Heijden@phys.tue.nl>
- * Please send thanks to him and bug reports to me :-)
+ * The original version of this file is largely based on a contribution from
+ * Harm van der Heijden.
  */
 
 #include <stdio.h>
@@ -61,7 +60,7 @@ class IndexFieldSDict : public SDict<IndexField>
 class HtmlHelpIndex
 {
   public:
-    HtmlHelpIndex();
+    HtmlHelpIndex(HtmlHelp *help);
    ~HtmlHelpIndex();
     void addItem(const char *first,const char *second, 
                  const char *url, const char *anchor,
@@ -69,10 +68,11 @@ class HtmlHelpIndex
     void writeFields(FTextStream &t);
   private:
     IndexFieldSDict *dict;   
+    HtmlHelp *m_help;
 };
 
 /*! Constructs a new HtmlHelp index */
-HtmlHelpIndex::HtmlHelpIndex()
+HtmlHelpIndex::HtmlHelpIndex(HtmlHelp *help) : m_help(help)
 {
   dict = new IndexFieldSDict;
   dict->setAutoDelete(TRUE);
@@ -199,7 +199,7 @@ void HtmlHelpIndex::writeFields(FTextStream &t)
         t << "<param name=\"Local\" value=\"" << f->url << Doxygen::htmlFileExtension;
         if (!f->anchor.isEmpty() && f->reversed) t << "#" << f->anchor;  
         t << "\">";
-        t << "<param name=\"Name\" value=\"" << level1 << "\">"
+        t << "<param name=\"Name\" value=\"" << m_help->recode(level1) << "\">"
            "</OBJECT>\n";
       }
       else
@@ -210,14 +210,14 @@ void HtmlHelpIndex::writeFields(FTextStream &t)
           t << "<param name=\"Local\" value=\"" << f->url << Doxygen::htmlFileExtension;
           if (!f->anchor.isEmpty() && f->reversed) t << "#" << f->anchor;  
           t << "\">";
-          t << "<param name=\"Name\" value=\"" << level1 << "\">"
+          t << "<param name=\"Name\" value=\"" << m_help->recode(level1) << "\">"
                "</OBJECT>\n";
         }
         else
         {
           t << "  <LI><OBJECT type=\"text/sitemap\">";
-          t << "<param name=\"See Also\" value=\"" << level1 << "\">";
-          t << "<param name=\"Name\" value=\"" << level1 << "\">"
+          t << "<param name=\"See Also\" value=\"" << m_help->recode(level1) << "\">";
+          t << "<param name=\"Name\" value=\"" << m_help->recode(level1) << "\">"
                "</OBJECT>\n";
         }
       }
@@ -238,7 +238,7 @@ void HtmlHelpIndex::writeFields(FTextStream &t)
       t << "<param name=\"Local\" value=\"" << f->url << Doxygen::htmlFileExtension;
       if (!f->anchor.isEmpty()) t << "#" << f->anchor;  
       t << "\">";
-      t << "<param name=\"Name\" value=\"" << level2 << "\">"
+      t << "<param name=\"Name\" value=\"" << m_help->recode(level2) << "\">"
          "</OBJECT>\n";
     }
     lastLevel1 = level1.copy();
@@ -259,7 +259,7 @@ HtmlHelp::HtmlHelp() : indexFileDict(1009)
   /* initial depth */
   dc = 0;
   cf = kf = 0;
-  index = new HtmlHelpIndex;
+  index = new HtmlHelpIndex(this);
   m_fromUtf8 = (void *)(-1);
 }
 
@@ -629,12 +629,16 @@ QCString HtmlHelp::recode(const QCString &s)
  *  \param ref  the URL of to the item.
  *  \param file the file in which the item is defined.
  *  \param anchor the anchor of the item.
+ *  \param separateIndex not used.
+ *  \param addToNavIndex not used.
  */
 void HtmlHelp::addContentsItem(bool isDir,
                                const char *name,
                                const char * /*ref*/, 
                                const char *file,
-                               const char *anchor)
+                               const char *anchor,
+                               bool /* separateIndex */,
+                               bool /* addToNavIndex */)
 {
   // If we're using a binary toc then folders cannot have links. 
   if(Config_getBool("BINARY_TOC") && isDir) 

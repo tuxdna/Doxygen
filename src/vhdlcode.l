@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -40,6 +40,7 @@
 #include "membername.h"
 #include "searchindex.h"
 #include "vhdldocgen.h"
+#include "arguments.h"
 
 #define YY_NEVER_INTERACTIVE 1
   
@@ -119,7 +120,7 @@ static void setCurrentDoc(const QCString &name,const QCString &base,const QCStri
   }
 }
 
-static bool checkString(QCString &name)
+static bool checkVhdlString(QCString &name)
 {
   if (name.isEmpty()) return FALSE;
   static QRegExp regg("[\\s\"]");
@@ -286,7 +287,7 @@ static void writeWord(const char *word,const char* curr_class=0,bool classLink=F
           }
           else                                                                          
 	  {
-          if (!checkString(temp))
+          if (!checkVhdlString(temp))
             g_code->codify(temp.data());
 	  }
         }
@@ -451,7 +452,14 @@ static void generateFuncLink(CodeOutputInterface &ol,MemberDef* mdef)
 
 static void generateMemLink(CodeOutputInterface &ol,QCString &clName,QCString& memberName)
 {
-  if (clName.isEmpty() || memberName.isEmpty()) return; 
+  if (memberName.isEmpty()) return; 
+  if (clName.isEmpty())
+  {
+    codifyLines(memberName.data());
+
+   return;
+  }
+  
   QCString className=clName;
 
   MemberDef *md=0;
@@ -610,12 +618,12 @@ static void codifyMapLines(char *text)
   int wordCounter=0;
   QCString ctemp;
   //printf("codifyLines(%d,\"%s\")\n",g_yyLineNr,text);
-  char *p=text,*sp=p;
+  char *p=text; //,*sp=p;
   char c;
   bool done=FALSE;
   while (!done)
   {
-    sp=p;
+    //sp=p;
     while ((c=*p++) &&  c!='\n' && c!=':' && c != ' ' && c != '(' && c!='\0' && c!='\t')
     { 
       if (c!=0x9)
@@ -775,6 +783,8 @@ MAPCOMPONENT2 {BN}*("port"|"generic"){BN}+("map"){BN}*("("){1}
 MAPCOMPONENT3 ({ALLTYPESMAP}[:]{BN}*{ALLTYPESMAP1}{TEXTT}*{BN}+("port"|"generic"){BN}+("map"){BN}*("("){1})
 MAPCOMPONENT4 ({ALLTYPESMAP}[:]{BN}*("entity"|"component"|"configuration"){BN}+{ALLTYPESMAP1}{TEXTT}*{BN}*("port"|"generic"){BN}*("map"){BN}*("("){1})
 
+XILINX      "INST"|"NET"|"PIN"|"BLKNM"|"BUFG"|"COLLAPSE"|"CPLD"|"COMPGRP"|"CONFIG"|"CONFIG_MODE"|"COOL_CLK"|"DATA_GATE"|"DCI_VALUE"|"DISABLE"|"DRIVE"|"DROP_SPEC"|"ENABLE"|"FAST"|"FEEDBACK"|"FILE"|"FLOAT"|"FROM-THRU-TO"|"FROM-TO"|"HBLKNM"|"HU_SET"|"INREG"|"IOB"|"IOBDELAY"|"IOSTANDARD"|"KEEP"|"KEEPER"|"LOC"|"LOCATE"|"LOCK_PINS"|"MAP"|"MAXDELAY"|"MAXPT"|"MAXSKEW"|"NODELAY"|"NOREDUCE"|"OFFSET"|"OPEN_DRAIN"|"OPT_EFFORT"|"OPTIMIZE"|"PERIOD"|"PIN"|"PRIORITY"|"PROHIBIT"|"PULLDOWN"|"PULLUP"|"PWR_MODE"|"REG"|"RLOC"|"RLOC_ORIGIN"|"RLOC_RANGE"|"SAVE NET"|"FLAG"|"SYSTEM_JITTER"|"TEMPERATURE"|"TIMEGRP"|"TIMESPEC"|"VOLTAGE"
+
 %option noyywrap
 %option nounput
 
@@ -824,7 +834,7 @@ MAPCOMPONENT4 ({ALLTYPESMAP}[:]{BN}*("entity"|"component"|"configuration"){BN}+{
 			    cc=t1.at(index);
 			  }        
 
-			  QCString s1=(QCString)ql[0];
+			  QCString s1=t1;
 			  s1=s1.stripWhiteSpace();
 
 			  //         if (!g_PortMapComp.isEmpty())
@@ -856,7 +866,7 @@ MAPCOMPONENT4 ({ALLTYPESMAP}[:]{BN}*("entity"|"component"|"configuration"){BN}+{
 			    cc=t1.at(index);
 			  }        
 			  s2=s2.stripWhiteSpace();
-			    if (!checkString(s2))
+			    if (!checkVhdlString(s2))
 			  generateMemLink(*g_code,g_CurrClass,s2); 
 			  while (index++<t1.size()) 
 			  { 
@@ -1114,7 +1124,7 @@ MAPCOMPONENT4 ({ALLTYPESMAP}[:]{BN}*("entity"|"component"|"configuration"){BN}+{
 <ParseComponent>[_a-zA_Z][_a-zA-Z0-9]*  {
                          QCString temp(vhdlcodeYYtext);
                          appStringLower(g_PrevString,vhdlcodeYYtext);
-                         if (!checkString(temp)){
+                         if (!checkVhdlString(temp)){
                          if (!writeColoredWord(g_PrevString))
 		         {
                            generateMemLink(*g_code,g_tempComp,temp); 
@@ -1124,7 +1134,7 @@ MAPCOMPONENT4 ({ALLTYPESMAP}[:]{BN}*("entity"|"component"|"configuration"){BN}+{
 
 <ParseComponent>{STRING} { 
                             QCString temp(vhdlcodeYYtext);
-                        if (!checkString(temp))
+                        if (!checkVhdlString(temp))
                          codifyLines(vhdlcodeYYtext);
                         }
 
@@ -1214,8 +1224,8 @@ MAPCOMPONENT4 ({ALLTYPESMAP}[:]{BN}*("entity"|"component"|"configuration"){BN}+{
                                else
 			       {
                                  generateClassOrGlobalLink(*g_code,left.data()); 
-                                 tt=tt.right(tt.length()-left.length()-1);
-                                 tt.prepend(" ");
+                                 tt.stripPrefix(left.data()); //=tt.right(tt.length()-left.length()-1);
+                                 
                                  g_PortMapComp=left;
                                  codifyLines(tt.data());
                                }
@@ -1424,6 +1434,19 @@ MAPCOMPONENT4 ({ALLTYPESMAP}[:]{BN}*("entity"|"component"|"configuration"){BN}+{
                        writeFont("keyword",vhdlcodeYYtext);
                 }
 
+<Bases>{B}*"#"[^\n]*  { 
+                                      writeFont("keyword",vhdlcodeYYtext);
+                                    }
+                                     
+<Bases>^{B}*{XILINX}[^\n]*  { 
+                            writeWord(yytext);
+                            //codifyLines(vhdlcodeYYtext,g_CurrClass.data(),TRUE);
+                         }           
+                             
+<Bases>^{B}*"set_"[^\n]*  { 
+                                      writeWord(yytext);
+                                    }
+                                    
 <*>\n                    {
 			   codifyLines(vhdlcodeYYtext);
 			   BEGIN(Bases);
@@ -1443,7 +1466,7 @@ MAPCOMPONENT4 ({ALLTYPESMAP}[:]{BN}*("entity"|"component"|"configuration"){BN}+{
 			   }  
 			   else // normal comment
 			   {
-			     startFontClass("comment");
+			     startFontClass("keyword");
 			     codifyLines(text);
 			     endFontClass();
 			   }
@@ -1458,7 +1481,7 @@ MAPCOMPONENT4 ({ALLTYPESMAP}[:]{BN}*("entity"|"component"|"configuration"){BN}+{
 			   }  
 			   else // normal comment
 			   {
-			     startFontClass("comment");
+			     startFontClass("keyword");
 			     codifyLines(text);
 			     endFontClass();
 			   }
@@ -1541,6 +1564,7 @@ void parseVhdlCode(CodeOutputInterface &od,const char *className,const QCString 
   {
     setParameterList(memberDef);
   }
+  int iLine=countLines();
   vhdlcodeYYrestart( vhdlcodeYYin );
   BEGIN( Bases );
   vhdlcodeYYlex();
@@ -1555,6 +1579,7 @@ void parseVhdlCode(CodeOutputInterface &od,const char *className,const QCString 
     delete g_sourceFileDef;
     g_sourceFileDef=0;
   }
+  assert(g_yyLineNr==iLine);
   return;
 }
 

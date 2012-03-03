@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -32,6 +32,7 @@
 #include "docparser.h"
 #include "language.h"
 #include "parserintf.h"
+#include "arguments.h"
 
 #include <qdir.h>
 #include <qfile.h>
@@ -119,8 +120,8 @@ inline void writeXMLCodeString(FTextStream &t,const char *s, int &col)
     {
       case '\t': 
       { 
-	int spacesToNextTabStop = 
-          Config_getInt("TAB_SIZE") - (col%Config_getInt("TAB_SIZE")); 
+        static int tabSize = Config_getInt("TAB_SIZE");
+	int spacesToNextTabStop = tabSize - (col%tabSize); 
 	col+=spacesToNextTabStop;
 	while (spacesToNextTabStop--) t << "<sp/>";
 	break;
@@ -495,12 +496,18 @@ void writeXMLCodeBlock(FTextStream &t,FileDef *fd)
   ParserInterface *pIntf=Doxygen::parserManager->getParser(fd->getDefFileExtension());
   pIntf->resetCodeParserState();
   XMLCodeGenerator *xmlGen = new XMLCodeGenerator(t);
-  pIntf->parseCode(*xmlGen,
-                0,
+  pIntf->parseCode(*xmlGen,  // codeOutIntf
+                0,           // scopeName
                 fileToString(fd->absFilePath(),Config_getBool("FILTER_SOURCE_FILES")),
-                FALSE,
-                0,
-                fd);
+                FALSE,       // isExampleBlock
+                0,           // exampleName
+                fd,          // fileDef
+                -1,          // startLine
+                -1,          // endLine
+                FALSE,       // inlineFragement
+                0,           // memberDef
+                TRUE         // showLineNumbers
+                );
   xmlGen->finish();
   delete xmlGen;
 }
@@ -543,20 +550,21 @@ static void stripQualifiers(QCString &typeStr)
 
 static QCString classOutputFileBase(ClassDef *cd)
 {
-  static bool inlineGroupedClasses = Config_getBool("INLINE_GROUPED_CLASSES");
-  if (inlineGroupedClasses && cd->partOfGroups()!=0) 
-    return cd->getXmlOutputFileBase();
-  else 
-    return cd->getOutputFileBase();
+  //static bool inlineGroupedClasses = Config_getBool("INLINE_GROUPED_CLASSES");
+  //if (inlineGroupedClasses && cd->partOfGroups()!=0) 
+  return cd->getOutputFileBase();
+  //else 
+  //  return cd->getOutputFileBase();
 }
 
 static QCString memberOutputFileBase(MemberDef *md)
 {
-  static bool inlineGroupedClasses = Config_getBool("INLINE_GROUPED_CLASSES");
-  if (inlineGroupedClasses && md->getClassDef() && md->getClassDef()->partOfGroups()!=0) 
-    return md->getClassDef()->getXmlOutputFileBase();
-  else 
-    return md->getOutputFileBase();
+  //static bool inlineGroupedClasses = Config_getBool("INLINE_GROUPED_CLASSES");
+  //if (inlineGroupedClasses && md->getClassDef() && md->getClassDef()->partOfGroups()!=0) 
+  //  return md->getClassDef()->getXmlOutputFileBase();
+  //else 
+  //  return md->getOutputFileBase();
+  return md->getOutputFileBase();
 }
 
 
@@ -1092,7 +1100,7 @@ static void writeInnerClasses(const ClassSDict *cl,FTextStream &t)
     {
       if (!cd->isHidden() && cd->name().find('@')==-1) // skip anonymous scopes
       {
-        t << "    <innerclass refid=\"" << cd->getOutputFileBase()
+        t << "    <innerclass refid=\"" << classOutputFileBase(cd)
           << "\" prot=\"";
         switch(cd->protection())
         {
@@ -1327,7 +1335,7 @@ static void generateXMLForClass(ClassDef *cd,FTextStream &ti)
     }
   }
 
-  writeInnerClasses(cd->getInnerClasses(),t);
+  writeInnerClasses(cd->getClassSDict(),t);
 
   writeTemplateList(cd,t);
   if (cd->getMemberGroupSDict())

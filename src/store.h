@@ -2,7 +2,7 @@
  *
  * 
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -93,6 +93,10 @@ class Store : public StorageIntf
     int read(char *buf,uint size);
 
     void printStats();
+
+    portable_off_t pos() const { return m_cur; }
+
+    void dumpBlock(portable_off_t start,portable_off_t end);
 
   private:
     enum State

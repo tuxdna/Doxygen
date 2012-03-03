@@ -2,7 +2,7 @@
  *
  * 
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -24,6 +24,10 @@
 #include <qdict.h>
 #include <qintdict.h>
 #include <qvector.h>
+
+class FTextStream;
+
+//------- server side search index ----------------------
 
 struct URL
 {
@@ -72,5 +76,9 @@ class SearchIndex
     int m_urlIndex;
 };
 
+//------- client side search index ----------------------
+
+void writeJavascriptSearchIndex();
+void writeSearchCategories(FTextStream &t);
 
 #endif

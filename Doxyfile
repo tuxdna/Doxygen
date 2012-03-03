@@ -121,6 +121,20 @@ EXCLUDE                = src/code.cpp \
                          src/doxygen_php.h \
                          src/compound_xsd.h \
                          src/layout_default.h \
+			 src/bib2xhtml.h \
+                         src/doxygen_bst.h \
+                         src/header_html.h \
+                         src/index_xsd.h \
+                         src/jquery_js.h \
+                         src/jquery_fx_js.h \
+                         src/jquery_ui_js.h \
+                         src/navtree_css.h \
+                         src/navtree_hs.h \
+                         src/search_css.h \
+                         src/search_functions_php.h \
+                         src/search_opensearch_php.h \
+                         src/search_js.h \
+                         src/sizzle_js.h
 EXCLUDE_SYMLINKS       = NO
 EXCLUDE_PATTERNS       =
 EXCLUDE_SYMBOLS        =
@@ -185,7 +199,7 @@ QHP_SECT_FILTER_ATTRS  =
 QHG_LOCATION           =
 GENERATE_ECLIPSEHELP   = NO
 ECLIPSE_DOC_ID         = org.doxygen.Project
-DISABLE_INDEX          = NO
+DISABLE_INDEX          = YES
 ENUM_VALUES_PER_LINE   = 4
 GENERATE_TREEVIEW      = YES
 USE_INLINE_TREES       = YES

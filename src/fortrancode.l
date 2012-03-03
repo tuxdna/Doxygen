@@ -652,16 +652,17 @@ ARGS_L2   "("({ARGS_L0}|[^()]|{ARGS_L1a}|{ARGS_L1})*")"
 ARGS      {BS}({ARGS_L0}|{ARGS_L1}|{ARGS_L2})
 
 NUM_TYPE  (complex|integer|logical|real)
+LOG_OPER  (\.and\.|\.eq\.|\.eqv\.|\.ge\.|\.gt\.|\.le\.|\.lt\.|\.ne\.|\.neqv\.|\.or\.|\.not\.)
 KIND      {ARGS}
 CHAR      (CHARACTER{ARGS}?|CHARACTER{BS}"*"({BS}[0-9]+|{ARGS}))
-TYPE_SPEC (({NUM_TYPE}({BS}"*"{BS}[0-9]+)?)|({NUM_TYPE}{KIND})|DOUBLE{BS_}PRECISION|{CHAR}|TYPE{ARGS})
+TYPE_SPEC (({NUM_TYPE}({BS}"*"{BS}[0-9]+)?)|({NUM_TYPE}{KIND})|DOUBLE{BS_}COMPLEX|DOUBLE{BS_}PRECISION|{CHAR}|TYPE{ARGS})
 
 INTENT_SPEC intent{BS}"("{BS}(in|out|in{BS}out){BS}")"
 ATTR_SPEC (ALLOCATABLE|DIMENSION{ARGS}|EXTERNAL|{INTENT_SPEC}|INTRINSIC|OPTIONAL|PARAMETER|POINTER|PRIVATE|PUBLIC|SAVE|TARGET|RECURSIVE|PURE|ELEMENTAL)
 ACCESS_SPEC (PRIVATE|PUBLIC)
 /* Assume that attribute statements are almost the same as attributes. */
 ATTR_STMT {ATTR_SPEC}|DIMENSION
-COMMANDS  (BLOCK{BS}DATA|DO|SELECT|CASE|WHERE|IF|THEN|ELSE|MODULE{BS_}PROCEDURE|CONTAINS|IMPLICIT{BS}NONE|CONTAINS|WRITE|READ|ALLOCATE|ALLOCATED|ASSOCIATED|DEALLOCATE|SIZE|END{BS}IF|END{BS}DO|WHILE|INQUIRE|OPEN|CLOSE|DATA)
+COMMANDS  (DO|SELECT|CASE|WHERE|IF|THEN|ELSE|MODULE{BS_}PROCEDURE|CONTAINS|IMPLICIT{BS}NONE|CONTAINS|WRITE|READ|ALLOCATE|ALLOCATED|ASSOCIATED|DEALLOCATE|SIZE|END{BS}IF|END{BS}DO|WHILE|INQUIRE|OPEN|CLOSE|DATA)
 IGNORE (CALL)
 
 /* |  */
@@ -741,7 +742,7 @@ IGNORE (CALL)
                                         }
        
  /*-------- fortran module  -----------------------------------------*/
-<Start>("program"|"module"|"type"|"interface")/{BS_}|({COMMA}{ACCESS_SPEC})|\n {  //
+<Start>("block"{BS}"data"|"program"|"module"|"type"|"interface")/{BS_}|({COMMA}{ACCESS_SPEC})|\n {  //
 					  startScope();
   					  startFontClass("keyword"); 
   					  codifyLines(yytext);
@@ -979,6 +980,9 @@ IGNORE (CALL)
 <*>.					{ 
   					  g_code->codify(yytext);
 					}
+<*>{LOG_OPER}                           { // Fortran logical comparison keywords
+                                          g_code->codify(yytext);
+                                        }
 %%
 
 /*@ ----------------------------------------------------------------------------

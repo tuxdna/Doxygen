@@ -2,7 +2,7 @@
  *
  * 
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -38,6 +38,7 @@
 #include "searchindex.h"
 #include "vhdldocgen.h"
 #include "layout.h"
+#include "arguments.h"
 
 //-----------------------------------------------------------------------------
 
@@ -175,8 +176,14 @@ class ClassDefImpl
     /** Is this a simple (non-nested) C structure? */
     bool isSimple;
 
+    /** Does this class overloaded the -> operator? */
+    MemberDef *arrowOperator;
+
     ClassList *taggedInnerClasses;
     ClassDef *tagLessRef;
+
+    /** Does this class represent a Java style enum? */
+    bool isJavaEnum;
 };
 
 void ClassDefImpl::init(const char *defFileName, const char *name,
@@ -217,6 +224,7 @@ void ClassDefImpl::init(const char *defFileName, const char *name,
   categoryOf = 0;
   usedOnly = FALSE;
   isSimple = Config_getBool("INLINE_SIMPLE_STRUCTS");
+  arrowOperator = 0;
   taggedInnerClasses = 0;
   tagLessRef = 0;
   //QCString ns;
@@ -266,13 +274,14 @@ ClassDef::ClassDef(
     const char *defFileName,int defLine,
     const char *nm,CompoundType ct,
     const char *lref,const char *fName,
-    bool isSymbol) 
+    bool isSymbol,bool isJavaEnum) 
  : Definition(defFileName,defLine,removeRedundantWhiteSpace(nm),0,0,isSymbol) 
 {
   visited=FALSE;
   setReference(lref);
   m_impl = new ClassDefImpl;
   m_impl->compType = ct;
+  m_impl->isJavaEnum = isJavaEnum;
   m_impl->init(defFileName,name(),compoundTypeString(),fName);
 }
 
@@ -396,14 +405,12 @@ void ClassDef::internalInsertMember(MemberDef *md,
   if (1 /*!isReference()*/) // changed to 1 for showing members of external
                             // classes when HAVE_DOT and UML_LOOK are enabled.
   {
-    static bool extractPrivate = Config_getBool("EXTRACT_PRIVATE");
-
     bool isSimple=FALSE;
 
     /********************************************/
     /* insert member in the declaration section */
     /********************************************/
-    if (md->isRelated() && (extractPrivate || prot!=Private))
+    if (md->isRelated() && protectionLevelVisible(prot))
     {
       addMemberToList(MemberList::related,md,TRUE);
     }
@@ -552,7 +559,7 @@ void ClassDef::internalInsertMember(MemberDef *md,
     /*******************************************************/
     /* insert member in the detailed documentation section */
     /*******************************************************/
-    if ((md->isRelated() && (extractPrivate || prot!=Private)) || md->isFriend())
+    if ((md->isRelated() && protectionLevelVisible(prot)) || md->isFriend())
     {
       addMemberToList(MemberList::relatedMembers,md,FALSE);
     }
@@ -571,23 +578,13 @@ void ClassDef::internalInsertMember(MemberDef *md,
           addMemberToList(MemberList::functionMembers,md,FALSE);
           break;
         case MemberDef::Slot:
-          switch (prot)
+          if (protectionLevelVisible(prot))
           {
-            case Protected: 
-            case Package: 
-            case Public:    
-              addMemberToList(MemberList::functionMembers,md,FALSE);
-              break;
-            case Private:   
-              if (extractPrivate)
-              {
-                addMemberToList(MemberList::functionMembers,md,FALSE);
-              }
-              break;
+            addMemberToList(MemberList::functionMembers,md,FALSE);
           }
           break;
         default: // any of the other members
-          if (prot!=Private || extractPrivate)
+          if (protectionLevelVisible(prot))
           {
             switch (md->memberType())
             {
@@ -634,6 +631,11 @@ void ClassDef::internalInsertMember(MemberDef *md,
   if (md->virtualness()==Pure)
   {
     m_impl->isAbstract=TRUE;
+  }
+
+  if (md->name()=="operator->")
+  {
+    m_impl->arrowOperator=md;
   }
 
   //::addClassMemberNameToIndex(md);
@@ -944,9 +946,9 @@ void ClassDef::writeDetailedDocumentationBody(OutputList &ol)
   {
     ol.startSimpleSect(BaseOutputDocInterface::Examples,0,0,theTranslator->trExamples()+": ");
     ol.startDescForItem();
-    ol.startParagraph();
+    //ol.startParagraph();
     writeExample(ol,m_impl->exampleSDict);
-    ol.endParagraph();
+    //ol.endParagraph();
     ol.endDescForItem();
     ol.endSimpleSect();
   }
@@ -1005,6 +1007,13 @@ void ClassDef::showUsedFiles(OutputList &ol)
     ol.parseText(theTranslator->trGeneratedFromFilesFortran(
           getLanguage()==SrcLangExt_ObjC && m_impl->compType==Interface ? Class : m_impl->compType,
           m_impl->files.count()==1));
+  }
+  else if (isJavaEnum())
+  {
+    // TODO: TRANSLATE ME
+    QCString s;
+    if (m_impl->files.count()!=1) s="s";
+    ol.parseText("The documentation for this enum was generated from the following file"+s+":");
   }
   else
   {
@@ -1473,30 +1482,8 @@ void ClassDef::writeSummaryLinks(OutputList &ol)
   ol.popGeneratorState();
 }
 
-void ClassDef::writeTagFileMarker(OutputList &ol)
+void ClassDef::writeTagFileMarker()
 {
-  // write markers for tag file processing to the output
-  ol.pushGeneratorState();
-  ol.disableAllBut(OutputGenerator::Html);
-  ol.writeString("<!-- doxytag: class=\"");
-  ol.docify(name());
-  ol.writeString("\" -->");
-  if (m_impl->inherits && m_impl->inherits->count()>0)
-  {
-    BaseClassListIterator bli(*m_impl->inherits);
-    ol.writeString("<!-- doxytag: inherits=\"");
-    BaseClassDef *bcd=0;
-    bool first=TRUE;
-    for (bli.toFirst();(bcd=bli.current());++bli)
-    {
-      if (!first) ol.writeString(",");
-      ol.docify(bcd->classDef->name());
-      first=FALSE;
-    }
-    ol.writeString("\" -->");
-  }
-  ol.popGeneratorState();
-
   // write section to the tag file
   if (!Config_getString("GENERATE_TAGFILE").isEmpty()) 
   {
@@ -1637,7 +1624,7 @@ void ClassDef::writeInlineDocumentation(OutputList &ol)
   ol.popGeneratorState();
 
   // part 4: write tag file information
-  writeTagFileMarker(ol);
+  writeTagFileMarker();
 }
 
 void ClassDef::writeMoreLink(OutputList &ol,const QCString &anchor)
@@ -1725,7 +1712,7 @@ void ClassDef::writeDeclarationLink(OutputList &ol,bool &found,const char *heade
       Doxygen::tagFile << "    <class kind=\"" << compoundTypeString() 
         << "\">" << convertToXML(name()) << "</class>" << endl;
     }
-    ol.startMemberItem(FALSE);
+    ol.startMemberItem(anchor(),FALSE);
     QCString ctype = compoundTypeString();
     QCString cname;
     if (localNames)
@@ -1765,14 +1752,14 @@ void ClassDef::writeDeclarationLink(OutputList &ol,bool &found,const char *heade
     {
       ol.writeString(" ");
       ol.insertMemberAlign();
-      VhdlDocGen::writeClassType(this,ol,cname);
+      ol.writeString(VhdlDocGen::getProtectionName((VhdlDocGen::VhdlClasses)protection()));
     }
     ol.endMemberItem();
 
     // add the brief description if available
     if (!briefDescription().isEmpty())
     {
-      ol.startMemberDescription();
+      ol.startMemberDescription(anchor());
       ol.parseDoc(briefFile(),briefLine(),this,0,
           briefDescription(),FALSE,FALSE,0,TRUE,FALSE);
       if (isLinkableInProject())
@@ -1792,7 +1779,7 @@ void ClassDef::writeDocumentationContents(OutputList &ol,const QCString &pageTit
   pageType += compoundTypeString();
   toupper(pageType.at(1));
 
-  writeTagFileMarker(ol);
+  writeTagFileMarker();
 
   Doxygen::indexList.addIndexItem(this,0);
 
@@ -1930,6 +1917,11 @@ void ClassDef::writeDocumentation(OutputList &ol)
     // TODO: TRANSLATE ME
     pageTitle = VhdlDocGen::getClassTitle(this)+" Reference";
   }
+  else if (isJavaEnum())
+  {
+    // TODO: TRANSLATE ME
+    pageTitle = displayName()+" Enum Reference";
+  }
   else
   {
     pageTitle = theTranslator->trCompoundReference(displayName(),
@@ -1953,12 +1945,7 @@ void ClassDef::writeDocumentation(OutputList &ol)
   endTitle(ol,getOutputFileBase(),displayName());
   writeDocumentationContents(ol,pageTitle);
     
-  if (generateTreeView)
-  {
-    writeNavigationPath(ol);
-  }
- 
-  endFile(ol,TRUE);
+  endFileWithNavPath(this,ol);
 
   if (Config_getBool("SEPARATE_MEMBER_PAGES"))
   {
@@ -1981,7 +1968,7 @@ void ClassDef::writeMemberPages(OutputList &ol)
   {
     if (ml->listType()&MemberList::detailedLists)
     {
-      ml->writeDocumentationPage(ol,name(),this);
+      ml->writeDocumentationPage(ol,displayName(),this);
     }
   }
 
@@ -2023,7 +2010,7 @@ void ClassDef::writeQuickMemberLinks(OutputList &ol,MemberDef *currentMd) const
             if (createSubDirs) ol.writeString("../../");
             ol.writeString(md->getOutputFileBase()+Doxygen::htmlFileExtension+"#"+md->anchor());
             ol.writeString("\">");
-            ol.writeString(md->name());
+            ol.writeString(convertToHtml(md->name()));
             ol.writeString("</a>");
           }
           ol.writeString("</td></tr>\n");
@@ -2049,7 +2036,7 @@ void ClassDef::writeDocumentationForInnerClasses(OutputList &ol)
     for (cli.toFirst();(innerCd=cli.current());++cli)
     {
       if (innerCd->isLinkableInProject() && innerCd->templateMaster()==0 &&
-          (innerCd->protection()!=Private || Config_getBool("EXTRACT_PRIVATE")) &&
+          protectionLevelVisible(innerCd->protection()) &&
          !innerCd->isEmbeddedInOuterScope()
          )
       {
@@ -2164,7 +2151,7 @@ void ClassDef::writeMemberList(OutputList &ol)
           memberWritten=TRUE;
         }
         else if (!Config_getBool("HIDE_UNDOC_MEMBERS") && 
-                  (md->protection()!=Private || Config_getBool("EXTRACT_PRIVATE") || md->isFriend()) 
+                  (protectionLevelVisible(md->protection()) || md->isFriend()) 
                 ) // no documentation, 
                   // generate link to the class instead.
         {
@@ -2431,6 +2418,8 @@ void ClassDef::writeDeclaration(OutputList &ol,MemberDef *md,bool inGroup)
       mg->writePlainDeclarations(ol,this,0,0,0);
     }
   }
+  static bool extractPrivate = Config_getBool("EXTRACT_PRIVATE");
+  static bool extractPackage = Config_getBool("EXTRACT_PACKAGE");
 
   writePlainMemberDeclaration(ol,MemberList::pubTypes,inGroup);
   writePlainMemberDeclaration(ol,MemberList::pubMethods,inGroup);
@@ -2448,12 +2437,15 @@ void ClassDef::writeDeclaration(OutputList &ol,MemberDef *md,bool inGroup)
   writePlainMemberDeclaration(ol,MemberList::proSlots,inGroup);
   writePlainMemberDeclaration(ol,MemberList::proStaticMethods,inGroup);
   writePlainMemberDeclaration(ol,MemberList::proStaticAttribs,inGroup);
-  writePlainMemberDeclaration(ol,MemberList::pacTypes,inGroup);
-  writePlainMemberDeclaration(ol,MemberList::pacMethods,inGroup);
-  writePlainMemberDeclaration(ol,MemberList::pacAttribs,inGroup);
-  writePlainMemberDeclaration(ol,MemberList::pacStaticMethods,inGroup);
-  writePlainMemberDeclaration(ol,MemberList::pacStaticAttribs,inGroup);
-  if (Config_getBool("EXTRACT_PRIVATE"))
+  if (extractPackage)
+  {
+    writePlainMemberDeclaration(ol,MemberList::pacTypes,inGroup);
+    writePlainMemberDeclaration(ol,MemberList::pacMethods,inGroup);
+    writePlainMemberDeclaration(ol,MemberList::pacAttribs,inGroup);
+    writePlainMemberDeclaration(ol,MemberList::pacStaticMethods,inGroup);
+    writePlainMemberDeclaration(ol,MemberList::pacStaticAttribs,inGroup);
+  }
+  if (extractPrivate)
   {
     writePlainMemberDeclaration(ol,MemberList::priTypes,inGroup);
     writePlainMemberDeclaration(ol,MemberList::priMethods,inGroup);
@@ -2469,7 +2461,6 @@ void ClassDef::writeDeclaration(OutputList &ol,MemberDef *md,bool inGroup)
 /*! a link to this class is possible within this project */
 bool ClassDef::isLinkableInProject() const
 { 
-  static bool extractPrivate = Config_getBool("EXTRACT_PRIVATE");
   static bool extractLocal   = Config_getBool("EXTRACT_LOCAL_CLASSES");
   static bool extractStatic  = Config_getBool("EXTRACT_STATIC");
   static bool hideUndoc      = Config_getBool("HIDE_UNDOC_CLASSES");
@@ -2482,7 +2473,7 @@ bool ClassDef::isLinkableInProject() const
     return !name().isEmpty() &&                    /* has a name */
       !isArtificial() && !isHidden() &&            /* not hidden */
       name().find('@')==-1 &&                      /* not anonymous */
-      (m_impl->prot!=Private || extractPrivate) && /* private */
+      protectionLevelVisible(m_impl->prot)      && /* private/internal */
       (!m_impl->isLocal      || extractLocal)   && /* local */
       (hasDocumentation()    || !hideUndoc)     && /* documented */ 
       (!m_impl->isStatic     || extractStatic)  && /* static */
@@ -2507,7 +2498,6 @@ bool ClassDef::isLinkable() const
 bool ClassDef::isVisibleInHierarchy() 
 { 
   static bool allExternals     = Config_getBool("ALLEXTERNALS");
-  static bool extractPrivate   = Config_getBool("EXTRACT_PRIVATE");
   static bool hideUndocClasses = Config_getBool("HIDE_UNDOC_CLASSES");
   static bool extractStatic    = Config_getBool("EXTRACT_STATIC");
 
@@ -2518,7 +2508,7 @@ bool ClassDef::isVisibleInHierarchy()
       // not an artificially introduced class
       !isArtificial() &&
       // and not privately inherited
-      (m_impl->prot!=Private || extractPrivate) &&
+      protectionLevelVisible(m_impl->prot) &&
       // documented or shown anyway or documentation is external 
       (hasDocumentation() || 
        !hideUndocClasses || 
@@ -2589,7 +2579,7 @@ void ClassDef::mergeMembers()
   //static bool optimizeOutputForJava = Config_getBool("OPTIMIZE_OUTPUT_JAVA");
   //static bool vhdlOpt = Config_getBool("OPTIMIZE_OUTPUT_VHDL");
   SrcLangExt lang = getLanguage();
-  QCString sep=getLanguageSpecificSeparator(lang);
+  QCString sep=getLanguageSpecificSeparator(lang,TRUE);
   int sepLen = sep.length();
 
   m_impl->membersMerged=TRUE;
@@ -3144,7 +3134,6 @@ void ClassDef::determineIntfUsageRelation()
 
 QCString ClassDef::compoundTypeString() const
 {
-  if (m_impl->compType==Interface && getLanguage()==SrcLangExt_ObjC) return "class";
   if (getLanguage()==SrcLangExt_Fortran)
   {
     switch (m_impl->compType)
@@ -3163,10 +3152,10 @@ QCString ClassDef::compoundTypeString() const
   {
     switch (m_impl->compType)
     {
-      case Class:     return "class";
+      case Class:     return isJavaEnum() ? "enum" : "class";
       case Struct:    return "struct";
       case Union:     return "union";
-      case Interface: return "interface";
+      case Interface: return getLanguage()==SrcLangExt_ObjC ? "class" : "interface";
       case Protocol:  return "protocol";
       case Category:  return "category";
       case Exception: return "exception";
@@ -3175,8 +3164,35 @@ QCString ClassDef::compoundTypeString() const
   }
 }
 
-QCString ClassDef::getXmlOutputFileBase() const
-{
+QCString ClassDef::getOutputFileBase() const 
+{ 
+  if (!Doxygen::generatingXmlOutput)
+  {
+    static bool inlineGroupedClasses = Config_getBool("INLINE_GROUPED_CLASSES");
+    static bool inlineSimpleClasses = Config_getBool("INLINE_SIMPLE_STRUCTS");
+    Definition *scope=0;
+    if (inlineGroupedClasses && partOfGroups()!=0)
+    {
+      // point to the group that embeds this class
+      return partOfGroups()->at(0)->getOutputFileBase();
+    }
+    else if (inlineSimpleClasses && m_impl->isSimple && partOfGroups()!=0)
+    {
+      // point to simple struct inside a group
+      return partOfGroups()->at(0)->getOutputFileBase();
+    }
+    else if (inlineSimpleClasses && m_impl->isSimple && (scope=getOuterScope()))
+    {
+      if (scope==Doxygen::globalScope && getFileDef() && getFileDef()->isLinkableInProject()) // simple struct embedded in file
+      {
+        return getFileDef()->getOutputFileBase();
+      }
+      else if (scope->isLinkableInProject()) // simple struct embedded in other container (namespace/group/class)
+      {
+        return getOuterScope()->getOutputFileBase();
+      }
+    }
+  }
   if (m_impl->templateMaster)
   {
     // point to the template of which this class is an instance
@@ -3191,43 +3207,6 @@ QCString ClassDef::getXmlOutputFileBase() const
   {
     // normal locally defined class
     return convertNameToFile(m_impl->fileName); 
-  }
-}
-
-QCString ClassDef::getOutputFileBase() const 
-{ 
-  static bool inlineGroupedClasses = Config_getBool("INLINE_GROUPED_CLASSES");
-  static bool inlineSimpleClasses = Config_getBool("INLINE_SIMPLE_STRUCTS");
-  Definition *scope=0;
-  if (inlineGroupedClasses && partOfGroups()!=0)
-  {
-    // point to the group that embeds this class
-    return partOfGroups()->at(0)->getOutputFileBase();
-  }
-  else if (inlineSimpleClasses && m_impl->isSimple && partOfGroups()!=0)
-  {
-    // point to simple struct inside a group
-    return partOfGroups()->at(0)->getOutputFileBase();
-  }
-  else if (inlineSimpleClasses && m_impl->isSimple && (scope=getOuterScope()) && 
-            (
-              (scope==Doxygen::globalScope && getFileDef() && getFileDef()->isLinkableInProject()) || 
-              scope->isLinkableInProject()
-            )
-          )
-  {
-    if (scope==Doxygen::globalScope) // simple struct embedded in file
-    {
-      return getFileDef()->getOutputFileBase();
-    }
-    else // simple struct embedded in other container (namespace/group/class)
-    {
-      return getOuterScope()->getOutputFileBase();
-    }
-  }
-  else
-  {
-    return getXmlOutputFileBase();
   }
 }
 
@@ -3715,7 +3694,7 @@ void ClassDef::writeMemberDeclarations(OutputList &ol,MemberList::ListType lt,co
   {
     if (getLanguage()==SrcLangExt_VHDL) // use specific declarations function
     {
-      VhdlDocGen::writeVhdlDeclarations(ml,ol,0,this,0);
+      VhdlDocGen::writeVhdlDeclarations(ml,ol,0,this,0,0);
     }
     else // use generic declaration function
     {
@@ -3728,7 +3707,7 @@ void ClassDef::writeMemberDocumentation(OutputList &ol,MemberList::ListType lt,c
 {
   //printf("%s: ClassDef::writeMemberDocumentation()\n",name().data());
   MemberList * ml = getMemberList(lt);
-  if (ml) ml->writeDocumentation(ol,name(),this,title,FALSE,showInline);
+  if (ml) ml->writeDocumentation(ol,displayName(),this,title,FALSE,showInline);
 }
 
 void ClassDef::writeSimpleMemberDocumentation(OutputList &ol,MemberList::ListType lt)
@@ -3754,7 +3733,7 @@ bool ClassDef::isLocal() const
   return m_impl->isLocal; 
 }
 
-ClassSDict *ClassDef::getInnerClasses() 
+ClassSDict *ClassDef::getClassSDict() 
 { 
   return m_impl->innerClasses; 
 }
@@ -3929,6 +3908,11 @@ bool ClassDef::isSimple() const
   return m_impl->isSimple;
 }
 
+MemberDef *ClassDef::isSmartPointer() const
+{
+  return m_impl->arrowOperator;
+}
+
 void ClassDef::reclassifyMember(MemberDef *md,MemberDef::MemberType t)
 {
   md->setMemberType(t);
@@ -3944,7 +3928,7 @@ void ClassDef::reclassifyMember(MemberDef *md,MemberDef::MemberType t)
 QCString ClassDef::anchor() const
 {
   QCString anc;
-  if (isEmbeddedInOuterScope())
+  if (isEmbeddedInOuterScope() && !Doxygen::generatingXmlOutput)
   {
     if (m_impl->templateMaster)
     {
@@ -4029,3 +4013,7 @@ void ClassDef::removeMemberFromLists(MemberDef *md)
   }
 }
 
+bool ClassDef::isJavaEnum() const
+{
+  return m_impl->isJavaEnum;
+}

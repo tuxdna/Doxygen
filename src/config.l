@@ -2,7 +2,7 @@
  *
  * 
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -454,7 +454,7 @@ static QCString configStringRecode(
   QCString outputEncoding = toEncoding;
   if (inputEncoding.isEmpty() || outputEncoding.isEmpty() || inputEncoding==outputEncoding) return str;
   int inputSize=str.length();
-  size_t outputSize=inputSize*4+1;
+  int outputSize=inputSize*4+1;
   QCString output(outputSize);
   void *cd = portable_iconv_open(outputEncoding,inputEncoding);
   if (cd==(void *)(-1)) 
@@ -463,13 +463,13 @@ static QCString configStringRecode(
         inputEncoding.data(),outputEncoding.data());
     exit(1);
   }
-  size_t iLeft=inputSize;
-  size_t oLeft=outputSize;
+  size_t iLeft=(size_t)inputSize;
+  size_t oLeft=(size_t)outputSize;
   const char *inputPtr  = str.data();
   char       *outputPtr = output.data();
   if (!portable_iconv(cd, &inputPtr, &iLeft, &outputPtr, &oLeft))
   {
-    outputSize-=oLeft;
+    outputSize-=(int)oLeft;
     output.resize(outputSize+1);
     output.at(outputSize)='\0';
     //printf("iconv: input size=%d output size=%d\n[%s]\n",size,newSize,srcBuf.data());
@@ -1223,20 +1223,28 @@ void Config::check()
   QCString &dotPath = Config_getString("DOT_PATH");
   if (!dotPath.isEmpty())
   {
-    QFileInfo dp(dotPath+"/dot"+portable_commandExtension());
-    if (!dp.exists() || !dp.isFile())
+    QFileInfo fi(dotPath);
+    if (fi.exists() && fi.isFile()) // user specified path + exec
     {
-      config_err("warning: the dot tool could not be found at %s\n",dotPath.data());
-      dotPath="";
+      dotPath=fi.dirPath(TRUE);
     }
     else
     {
-      dotPath=dp.dirPath(TRUE)+"/";
-#if defined(_WIN32) // convert slashes
-      uint i=0,l=dotPath.length();
-      for (i=0;i<l;i++) if (dotPath.at(i)=='/') dotPath.at(i)='\\';
-#endif
+      QFileInfo dp(dotPath+"/dot"+portable_commandExtension());
+      if (!dp.exists() || !dp.isFile())
+      {
+	config_err("warning: the dot tool could not be found at %s\n",dotPath.data());
+	dotPath="";
+      }
+      else
+      {
+	dotPath=dp.dirPath(TRUE)+"/";
+      }
     }
+#if defined(_WIN32) // convert slashes
+    uint i=0,l=dotPath.length();
+    for (i=0;i<l;i++) if (dotPath.at(i)=='/') dotPath.at(i)='\\';
+#endif
   }
   else // make sure the string is empty but not null!
   {
@@ -1326,6 +1334,8 @@ void Config::check()
     filePatternList.append("*.vhd");
     filePatternList.append("*.vhdl");
     filePatternList.append("*.tcl");
+    filePatternList.append("*.md");
+    filePatternList.append("*.markdown");
     if (portable_fileSystemIsCaseSensitive())
     {
       // unix => case sensitive match => also include useful uppercase versions
@@ -1348,6 +1358,8 @@ void Config::check()
       filePatternList.append("*.VHD");
       filePatternList.append("*.VHDL");
       filePatternList.append("*.TCL");
+      filePatternList.append("*.MD");
+      filePatternList.append("*.MARKDOWN");
     }
   }
 
@@ -1469,21 +1481,24 @@ void Config::check()
     bool b2 = Config_getBool("INHERIT_DOCS");
     bool b3 = Config_getBool("HIDE_SCOPE_NAMES");
     bool b4 = Config_getBool("EXTRACT_PRIVATE");
-    const char *s1,*s2,*s3,*s4;
+    bool b5 = Config_getBool("SKIP_FUNCTION_MACROS");
+    const char *s1,*s2,*s3,*s4,*s5;
     if (b1)  s1="  INLINDE_INHERITED_MEMB = NO (was YES)\n"; else s1="";
     if (b2)  s2="  INHERIT_DOCS           = NO (was YES)\n"; else s2="";
     if (!b3) s3="  HIDE_SCOPE_NAMES       = YES (was NO)\n"; else s3="";
     if (!b4) s4="  EXTRACT_PRIVATE        = YES (was NO)\n"; else s4="";
+    if (b5)  s5="  ENABLE_PREPROCESSING   = NO (was YES)\n"; else s5="";
 
     config_err("warning: enabling OPTIMIZE_OUTPUT_VHDL assumes the following settings:\n"
-	       "%s%s%s%s",s1,s2,s3,s4
+	       "%s%s%s%s%s",s1,s2,s3,s4,s5
 	      );
 
     Config_getBool("INLINE_INHERITED_MEMB") = FALSE;
     Config_getBool("INHERIT_DOCS")          = FALSE;
     Config_getBool("HIDE_SCOPE_NAMES")      = TRUE;
     Config_getBool("EXTRACT_PRIVATE")       = TRUE;
-  }
+    Config_getBool("ENABLE_PREPROCESSING")  = FALSE;
+  }                               
 
 }
 

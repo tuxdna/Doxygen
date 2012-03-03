@@ -64,8 +64,11 @@
 #include "commentscan.h" 
 #include "fortrancode.h"
 #include "pre.h"
+#include "arguments.h"
 
 #define YY_NEVER_INTERACTIVE 1
+
+class Arguments;
 
 enum ScanVar { V_IGNORE, V_VARIABLE, V_PARAMETER};
 enum InterfaceType { IF_NONE, IF_SPECIFIC, IF_GENERIC, IF_ABSTRACT };
@@ -178,6 +181,7 @@ static Protection        defaultProtection;
 static Protection        typeProtection;
 static int               typeMode = false;
 static InterfaceType     ifType = IF_NONE;
+static bool              functionLine = FALSE;
 
 static char              stringStartSymbol; // single or double quote
 
@@ -202,7 +206,7 @@ static void scanner_abort();
 static void startScope(Entry *scope);
 static bool endScope(Entry *scope, bool isGlobalRoot=FALSE);
 static QCString getFullName(Entry *e);
-static bool isTypeName(QCString name);
+//static bool isTypeName(QCString name);
 static void resolveModuleProcedures(QList<Entry> &moduleProcedures, Entry *current_root);
 static int getAmpersandAtTheStart(const char *buf, int length);
 static int getAmpOrExclAtTheEnd(const char *buf, int length);
@@ -229,6 +233,7 @@ IDSYM	  [a-z_A-Z0-9]
 NOTIDSYM  [^a-z_A-Z0-9]
 SEPARATE  [:, \t]
 ID        [a-z_A-Z%]+{IDSYM}*
+ID_       [a-z_A-Z%]*{IDSYM}*
 PP_ID     {ID}
 LABELID   [a-z_A-Z]+[a-z_A-Z0-9\-]*
 SUBPROG   (subroutine|function)
@@ -244,9 +249,10 @@ ARGS      {BS}({ARGS_L0}|{ARGS_L1}|{ARGS_L2})
 NOARGS    {BS}"\n"
 
 NUM_TYPE  (complex|integer|logical|real)
+LOG_OPER  (\.and\.|\.eq\.|\.eqv\.|\.ge\.|\.gt\.|\.le\.|\.lt\.|\.ne\.|\.neqv\.|\.or\.|\.not\.)
 KIND      {ARGS}
 CHAR      (CHARACTER{ARGS}?|CHARACTER{BS}"*"({BS}[0-9]+|{ARGS}))
-TYPE_SPEC (({NUM_TYPE}({BS}"*"{BS}[0-9]+)?)|({NUM_TYPE}{KIND})|DOUBLE{BS_}PRECISION|{CHAR}|TYPE{ARGS}|CLASS{ARGS}|PROCEDURE{ARGS}?)
+TYPE_SPEC (({NUM_TYPE}({BS}"*"{BS}[0-9]+)?)|({NUM_TYPE}{KIND})|DOUBLE{BS_}COMPLEX|DOUBLE{BS_}PRECISION|{CHAR}|TYPE{ARGS}|CLASS{ARGS}|PROCEDURE{ARGS}?)
 
 INTENT_SPEC intent{BS}"("{BS}(in|out|in{BS}out){BS}")"
 ATTR_SPEC (ALLOCATABLE|DIMENSION{ARGS}|EXTERNAL|{INTENT_SPEC}|INTRINSIC|OPTIONAL|PARAMETER|POINTER|PRIVATE|PUBLIC|SAVE|TARGET|NOPASS|PASS{ARGS}?|DEFERRED|NON_OVERRIDABLE)
@@ -298,11 +304,13 @@ PREFIX    (RECURSIVE{BS_}|PURE{BS_}|ELEMENTAL{BS_}){0,2}(RECURSIVE|PURE|ELEMENTA
 %x	DocBackLine
 %x	EndDoc
 
+%x      BlockData
 %%
 
  /*-----------------------------------------------------------------------------------*/
 
 <*>^.*\n                                { // prepass: look for line continuations
+  					  functionLine = FALSE;
 
                                           //fprintf(stderr, "---%s", yytext);
 
@@ -503,6 +511,11 @@ PREFIX    (RECURSIVE{BS_}|PURE{BS_}|ELEMENTAL{BS_}){0,2}(RECURSIVE|PURE|ELEMENTA
 <TypedefBody>^{BS}{CONTAINS}/({BS}|\n|!)  { BEGIN(TypedefBodyContains); }
 
  /*------ module handling ------------------------------------------------------------*/ 
+<Start>block{BS}data{BS}{ID_}        {  //
+                                         v_type = V_IGNORE;
+					    yy_push_state(BlockData);
+                                            defaultProtection = Public;
+                                       }
 <Start>module|program{BS_}             {  //
                                          v_type = V_IGNORE;
 					    if(yytext[0]=='m' || yytext[0]=='M')
@@ -510,6 +523,12 @@ PREFIX    (RECURSIVE{BS_}|PURE{BS_}|ELEMENTAL{BS_}){0,2}(RECURSIVE|PURE|ELEMENTA
 					    else
 					      yy_push_state(Program);
                                             defaultProtection = Public;
+                                       }
+<BlockData>^{BS}"end"({BS}(block{BS}data)({BS_}{ID})?)?{BS}/(\n|!) { // end block data
+					    //if (!endScope(current_root))
+					    //  yyterminate();
+                                            defaultProtection = Public;
+					    yy_pop_state();
                                        }
 <Start,ModuleBody,ModuleBodyContains>^{BS}"end"({BS}(module|program)({BS_}{ID})?)?{BS}/(\n|!) { // end module	
 					    resolveModuleProcedures(moduleProcedures, current_root);
@@ -658,6 +677,10 @@ private                                 {
                                            subrCurrent.remove(0u);
 					   yy_pop_state() ;
 				        }
+<BlockData>{
+{ID}                                    {
+                                        }
+}
 <Start,ModuleBody,TypedefBody,SubprogBody>{
 ^{BS}{TYPE_SPEC}/{SEPARATE}             {
                                           /* variable declaration starts */
@@ -669,10 +692,11 @@ private                                 {
 					  argType = QCString(yytext).simplifyWhiteSpace();
 					  yy_push_state(AttributeList);
                                         }
-^{BS}{PP_ID}{KIND}?			{ /* check for preprocessor symbol expand to type */
+  /*  Dimitri: macro expansion should already be done during preprocessing not here!
+^{BS}{PP_ID}{KIND}?			{ // check for preprocessor symbol expand to type
 					  QCString str = yytext;
 					  str = str.stripWhiteSpace();
-					  DefineDict* defines = getGlobalDefineDict();
+					  //DefineDict* defines = getGlobalDefineDict();
 					  QCString name;
 					  int index = str.find("(");
 					  if (index != -1)
@@ -680,7 +704,7 @@ private                                 {
 					  else
 					    name = str;
 
-					  Define *define = (*defines)[name];
+					  Define *define = 0; //(*defines)[name];
 					  if (define != 0 && isTypeName(define->definition)) 
 					  {
 					    argType = str;
@@ -692,6 +716,7 @@ private                                 {
 					    REJECT;
 					  }
 					}
+  */
 {ATTR_STMT}/{BS_}{ID}		       |
 {ATTR_STMT}/{BS}"::"                   { 
                                           /* attribute statement starts */
@@ -847,14 +872,16 @@ private                                 {
 <Variable>";".*"\n"                     { currentModifiers = SymbolModifiers();
                                           yy_pop_state(); // end variable declaration list
                                           docBlock.resize(0);
-                                          inputStringSemi =(const char*)(yytext+1);
+                                          inputStringSemi =(const char*)(QCString(" \n") + QCString(yytext+1)).data();
+                                          yyLineNr--;
                                           pushBuffer(inputStringSemi);
                                         }
 <*>";".*"\n"                            {
 					  if (YY_START == Variable) REJECT; // Just be on the safe side
                                           if (YY_START == String) REJECT; // ";" ignored in strings
                                           if (YY_START == StrIgnore) REJECT; // ";" ignored in regular comments
-                                          inputStringSemi =(const char*)(yytext+1);
+                                          inputStringSemi =(const char*)(QCString(" \n") + QCString(yytext+1)).data();
+                                          yyLineNr--;
                                           pushBuffer(inputStringSemi);
                                         }
 
@@ -980,10 +1007,13 @@ private                                 {
 					   BEGIN(SubprogBody);				           
 }
 <SubprogBody>result{BS}\({BS}{ID}      {  
-                                           result= yytext;
-                                           result= result.right(result.length()-result.find("(")-1);
-                                           result= result.stripWhiteSpace();
- 					   modifiers[current_root->parent()][current_root->name.lower()].returnName = result;
+  					   if (functionLine)
+					   {
+                                             result= yytext;
+                                             result= result.right(result.length()-result.find("(")-1);
+                                             result= result.stripWhiteSpace();
+ 					     modifiers[current_root->parent()][current_root->name.lower()].returnName = result;
+					   }
                                            //cout << "=====> got result " <<  result << endl;
  				       } 
 
@@ -1073,7 +1103,9 @@ private                                 {
                                             popBuffer();
                                           }
                                         }
- <*>.                 	                {
+<*>{LOG_OPER}                           { // Fortran logical comparison keywords
+                                        }
+<*>.                 	                {
                                           //debugStr+=yytext;
 					  //printf("I:%c\n", *yytext);
                                         } // ignore remaining text 
@@ -1406,12 +1438,14 @@ void resolveModuleProcedures(QList<Entry> &moduleProcedures, Entry *current_root
   moduleProcedures.clear();
 }
 
+#if 0
 static bool isTypeName(QCString name)
 {
   name = name.lower();
   return name=="integer" || name == "real" || 
-    name=="complex" || name == "logical";
+         name=="complex" || name == "logical";
 }
+#endif
 
 /*! Extracts string which resides within parentheses of provided string. */
 static QCString extractFromParens(const QCString name)
@@ -1903,6 +1937,7 @@ static void addSubprogram(const char *text)
   subrCurrent.prepend(current);
   current->section = Entry::FUNCTION_SEC ;
   QCString subtype = text; subtype=subtype.lower().stripWhiteSpace();
+  functionLine = subtype=="function";
   current->type += " " + subtype;
   current->type = current->type.stripWhiteSpace();
   current->fileName  = yyFileName;
@@ -2038,16 +2073,16 @@ static void subrHandleCommentBlock(const QCString &doc,bool brief)
   current = subrCurrent.first(); // temporarily switch to the entry of the subroutine / function
   if (docBlock.stripWhiteSpace().find("\\param") == 0)
   {
-    handleCommentBlock(doc,brief);
+    handleCommentBlock("\n\n"+doc,brief);
   }
   else if (docBlock.stripWhiteSpace().find("@param") == 0)
   {
-    handleCommentBlock(doc,brief);
+    handleCommentBlock("\n\n"+doc,brief);
   }
   else 
   {
     int dir1 = modifiers[current_root][argName.lower()].direction;
-    handleCommentBlock(QCString("@param ") + directionParam[dir1] + " " + 
+    handleCommentBlock(QCString("\n\n@param ") + directionParam[dir1] + " " + 
 	               argName + " " + doc,brief);
   }
   current=tmp_entry;
@@ -2090,8 +2125,9 @@ static void parseMain(const char *fileName,const char *fileBuf,Entry *rt)
   {
     isFixedForm = recognizeFixedForm(fileBuf);
 
-    if (isFixedForm) {
-      printf("Prepassing fixed form of %s\n", fileName);
+    if (isFixedForm) 
+    {
+      msg("Prepassing fixed form of %s\n", fileName);
       //printf("---strlen=%d\n", strlen(fileBuf));
       //clock_t start=clock();
 

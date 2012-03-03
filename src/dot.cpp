@@ -3,7 +3,7 @@
  * 
  *
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -115,6 +115,13 @@ static const char svgZoomFooter[] =
 "                  <path fill=\"none\" stroke=\"white\" stroke-width=\"1.5\" d=\"M0,-3.0v7 M-2.5,-0.5L0,-3.0L2.5,-0.5\"/>\n"
 "                </g>\n"
 "        </g>\n"
+"        <svg viewBox=\"0 0 25 25\" width=\"100%\" height=\"30px\" preserveAspectRatio=\"xMaxYMin meet\"> \n"
+"          <g id=\"printButton\" transform=\"scale(0.4 0.4)\" onmousedown=\"handlePrint(evt)\">\n"
+"            <rect height=\"23.33753581\" id=\"paper\" rx=\"2\" style=\"fill:#f2f5e9;fill-rule:evenodd;stroke:#111111;stroke-width:3.224;stroke-linejoin:round;\" transform=\"matrix(1.000000,0.000000,-0.339266,0.940691,0.000000,0.000000)\" width=\"25.55231285\" x=\"26.69387353\" y=\"7.36162977\"/>\n"
+"            <rect height=\"26.272097\" id=\"body\" rx=\"2\" style=\"fill:#404040;fill-rule:evenodd;stroke:#111111;stroke-width:3.125;stroke-linejoin:round;\" width=\"50\" x=\"4.5295201\" y=\"27.078951\"/>\n"
+"            <rect height=\"8.27750969\" id=\"tray\" style=\"fill:#d2d5c9;fill-rule:evenodd;stroke:#111111;stroke-width:3.125;stroke-linecap:round;stroke-linejoin:round;\" width=\"40\" x=\"10.28778839\" y=\"44.96812282\"/>\n"
+"          </g>\n"
+"        </svg>\n"
 "</svg>\n"
 ;
 
@@ -243,7 +250,7 @@ static QCString replaceRef(const QCString &buf,const QCString relPath,
 {
   // search for href="...", store ... part in link
   QCString href = "href";
-  bool isXLink=FALSE;
+  //bool isXLink=FALSE;
   int len = 6;
   int indexS = buf.find("href=\""), indexE;
   if (indexS>5 && buf.find("xlink:href=\"")!=-1) // XLink href (for SVG)
@@ -251,7 +258,7 @@ static QCString replaceRef(const QCString &buf,const QCString relPath,
     indexS-=6;
     len+=6;
     href.prepend("xlink:");
-    isXLink=TRUE;
+    //isXLink=TRUE;
   }
   if (indexS>=0 && (indexE=buf.find('"',indexS+len))!=-1)
   {
@@ -537,11 +544,12 @@ static bool readSVGSize(const QCString &fileName,int *width,int *height)
     if (numBytes>0)
     {
       buf[numBytes]='\0';
-      if (strncmp(buf,"<!--zoomable-->",15)==0)
+      if (strncmp(buf,"<!--zoomable ",13)==0)
       {
-        //printf("Found zoomable for %s!\n",fileName.data());
         *width=-1;
         *height=-1;
+        sscanf(buf,"<!--zoomable %d",height);
+        //printf("Found zoomable for %s!\n",fileName.data());
         found=TRUE;
       }
       else if (sscanf(buf,"<svg width=\"%dpt\" height=\"%dpt\"",width,height)==2)
@@ -569,18 +577,23 @@ static void writeSVGNotSupported(FTextStream &out)
 static bool writeSVGFigureLink(FTextStream &out,const QCString &relPath,
                            const QCString &baseName,const QCString &absImgName)
 {
-  int width=600,height=450;
+  int width=600,height=600;
   if (!readSVGSize(absImgName,&width,&height))
   {
     return FALSE;
   }
-  if (width==-1 && height==-1)
+  if (width==-1)
   {
+    if (height<=60) 
+      height=60;
+    else 
+      height+=40; // add some extra space for zooming
+    if (height>600) height=600; // clip to maximum height of 600 pixels
     out << "<div class=\"zoom\">";
     //out << "<object type=\"image/svg+xml\" data=\"" 
     //out << "<embed type=\"image/svg+xml\" src=\"" 
     out << "<iframe scrolling=\"no\" frameborder=\"0\" src=\"" 
-        << relPath << baseName << ".svg\" width=\"100%\" height=\"600\">";
+        << relPath << baseName << ".svg\" width=\"100%\" height=\"" << height << "\">";
   }
   else
   {
@@ -595,7 +608,7 @@ static bool writeSVGFigureLink(FTextStream &out,const QCString &relPath,
   //out << "</object>";
   //out << "</embed>";
   out << "</iframe>";
-  if (width==-1 && height==-1)
+  if (width==-1)
   {
     out << "</div>";
   }
@@ -609,14 +622,11 @@ static void checkDotResult(const QCString &imgName)
 {
   if (Config_getEnum("DOT_IMAGE_FORMAT")=="png")
   {
-    //QFile f(imgName);
     FILE *f = fopen(imgName,"rb");
-    //if (f.open(IO_ReadOnly))
     if (f)
     {
       char data[4];
       if (fread(data,1,4,f)==4)
-      //if (f.readBlock(data,4)==4)
       {
         if (!(data[1]=='P' && data[2]=='N' && data[3]=='G'))
         {
@@ -962,7 +972,7 @@ bool DotFilePatcher::run()
           if (foundSize)
           {
             // insert special replacement header for interactive SVGs
-            t << "<!--zoomable-->\n";
+            t << "<!--zoomable " << height << " -->\n";
             t << svgZoomHeader;
             t << "var viewWidth = " << width << ";\n";
             t << "var viewHeight = " << height << ";\n";
@@ -1495,7 +1505,6 @@ static QCString convertLabel(const QCString &l)
   return result;
 }
 
-#if 0
 static QCString escapeTooltip(const QCString &tooltip)
 {
   QCString result;
@@ -1506,32 +1515,54 @@ static QCString escapeTooltip(const QCString &tooltip)
   {
     switch(c)
     {
-      case '\\': result+="\\\\"; break;
-      default:   result+=c; break;
+      case '"': result+="\\\""; break;
+      default: result+=c; break;
     }
   }
   return result;
 }
-#endif
 
 static void writeBoxMemberList(FTextStream &t,
             char prot,MemberList *ml,ClassDef *scope,
-            bool isStatic=FALSE)
+            bool isStatic=FALSE,const QDict<void> *skipNames=0)
 {
   (void)isStatic;
   if (ml)
   {
     MemberListIterator mlia(*ml);
     MemberDef *mma;
+    int totalCount=0;
     for (mlia.toFirst();(mma = mlia.current());++mlia)
     {
-      if (mma->getClassDef() == scope)
+      if (mma->getClassDef()==scope && 
+          (skipNames==0 || skipNames->find(mma->name())==0))
       {
-        t << prot << " ";
-        t << convertLabel(mma->name());
-        if (!mma->isObjCMethod() && 
-            (mma->isFunction() || mma->isSlot() || mma->isSignal())) t << "()";
-        t << "\\l";
+        totalCount++;
+      }
+    }
+
+    int count=0;
+    for (mlia.toFirst();(mma = mlia.current());++mlia)
+    {
+      if (mma->getClassDef() == scope &&
+          (skipNames==0 || skipNames->find(mma->name())==0))
+      {
+        static int limit = Config_getInt("UML_LIMIT_NUM_FIELDS");
+        if (limit==0 || (totalCount>=limit*3/2 && count>=limit))
+        {
+          t << "and " << (totalCount-count-1) << " more...";
+          // TODO: TRANSLATE ME
+          break;
+        }
+        else
+        {
+          t << prot << " ";
+          t << convertLabel(mma->name());
+          if (!mma->isObjCMethod() && 
+              (mma->isFunction() || mma->isSlot() || mma->isSignal())) t << "()";
+          t << "\\l";
+          count++;
+        }
       }
     }
     // write member groups within the memberlist
@@ -1544,7 +1575,7 @@ static void writeBoxMemberList(FTextStream &t,
       {
         if (mg->members())
         {
-          writeBoxMemberList(t,prot,mg->members(),scope);
+          writeBoxMemberList(t,prot,mg->members(),scope,isStatic,skipNames);
         }
       }
     }
@@ -1563,25 +1594,41 @@ void DotNode::writeBox(FTextStream &t,
             (hasNonReachableChildren) ? "red" : "black"
            );
   t << "  Node" << reNumberNode(m_number,reNumber) << " [label=\"";
+  static bool umlLook = Config_getBool("UML_LOOK");
 
-  if (m_classDef && Config_getBool("UML_LOOK") && 
-      (gt==Inheritance || gt==Collaboration))
+  if (m_classDef && umlLook && (gt==Inheritance || gt==Collaboration))
   {
+    // add names shown as relation to a dictionary, so we don't show
+    // them as attributes as well
+    QDict<void> arrowNames(17);
+    if (m_edgeInfo)
+    {
+      QListIterator<EdgeInfo> li(*m_edgeInfo);
+      EdgeInfo *ei;
+      for (li.toFirst();(ei=li.current());++li)
+      {
+        if (!ei->m_label.isEmpty())
+        {
+          arrowNames.insert(ei->m_label,(void*)0x8);
+        }
+      }
+    }
+
     //printf("DotNode::writeBox for %s\n",m_classDef->name().data());
     static bool extractPrivate = Config_getBool("EXTRACT_PRIVATE");
     t << "{" << convertLabel(m_label);
     t << "\\n|";
-    writeBoxMemberList(t,'+',m_classDef->getMemberList(MemberList::pubAttribs),m_classDef);
-    writeBoxMemberList(t,'+',m_classDef->getMemberList(MemberList::pubStaticAttribs),m_classDef,TRUE);
-    writeBoxMemberList(t,'+',m_classDef->getMemberList(MemberList::properties),m_classDef);
-    writeBoxMemberList(t,'~',m_classDef->getMemberList(MemberList::pacAttribs),m_classDef);
-    writeBoxMemberList(t,'~',m_classDef->getMemberList(MemberList::pacStaticAttribs),m_classDef,TRUE);
-    writeBoxMemberList(t,'#',m_classDef->getMemberList(MemberList::proAttribs),m_classDef);
-    writeBoxMemberList(t,'#',m_classDef->getMemberList(MemberList::proStaticAttribs),m_classDef,TRUE);
+    writeBoxMemberList(t,'+',m_classDef->getMemberList(MemberList::pubAttribs),m_classDef,FALSE,&arrowNames);
+    writeBoxMemberList(t,'+',m_classDef->getMemberList(MemberList::pubStaticAttribs),m_classDef,TRUE,&arrowNames);
+    writeBoxMemberList(t,'+',m_classDef->getMemberList(MemberList::properties),m_classDef,FALSE,&arrowNames);
+    writeBoxMemberList(t,'~',m_classDef->getMemberList(MemberList::pacAttribs),m_classDef,FALSE,&arrowNames);
+    writeBoxMemberList(t,'~',m_classDef->getMemberList(MemberList::pacStaticAttribs),m_classDef,TRUE,&arrowNames);
+    writeBoxMemberList(t,'#',m_classDef->getMemberList(MemberList::proAttribs),m_classDef,FALSE,&arrowNames);
+    writeBoxMemberList(t,'#',m_classDef->getMemberList(MemberList::proStaticAttribs),m_classDef,TRUE,&arrowNames);
     if (extractPrivate)
     {
-      writeBoxMemberList(t,'-',m_classDef->getMemberList(MemberList::priAttribs),m_classDef);
-      writeBoxMemberList(t,'-',m_classDef->getMemberList(MemberList::priStaticAttribs),m_classDef,TRUE);
+      writeBoxMemberList(t,'-',m_classDef->getMemberList(MemberList::priAttribs),m_classDef,FALSE,&arrowNames);
+      writeBoxMemberList(t,'-',m_classDef->getMemberList(MemberList::priStaticAttribs),m_classDef,TRUE,&arrowNames);
     }
     t << "|";
     writeBoxMemberList(t,'+',m_classDef->getMemberList(MemberList::pubMethods),m_classDef);
@@ -1607,7 +1654,7 @@ void DotNode::writeBox(FTextStream &t,
       {
         if (mg->members())
         {
-          writeBoxMemberList(t,'*',mg->members(),m_classDef);
+          writeBoxMemberList(t,'*',mg->members(),m_classDef,FALSE,&arrowNames);
         }
       }
     }
@@ -1656,7 +1703,7 @@ void DotNode::writeBox(FTextStream &t,
     }
     if (!m_tooltip.isEmpty())
     {
-      t << ",tooltip=\"" << /*escapeTooltip(m_tooltip)*/ m_tooltip << "\"";
+      t << ",tooltip=\"" << escapeTooltip(m_tooltip) << "\"";
     }
   }
   t << "];" << endl; 
@@ -2013,6 +2060,9 @@ void DotGfxHierarchyTable::writeGraph(FTextStream &out,
 {
   //printf("DotGfxHierarchyTable::writeGraph(%s)\n",name);
   //printf("m_rootNodes=%p count=%d\n",m_rootNodes,m_rootNodes->count());
+  
+  static bool vhdl = Config_getBool("OPTIMIZE_OUTPUT_VHDL");
+
   if (m_rootSubgraphs->count()==0) return;
 
   QDir d(path);
@@ -2031,6 +2081,18 @@ void DotGfxHierarchyTable::writeGraph(FTextStream &out,
   for (dnli.toFirst();(n=dnli.current());++dnli)
   {
     QCString baseName;
+
+    if (vhdl)
+    {   
+      QCString l=n->m_url;
+      l=VhdlDocGen::convertFileNameToClassName(l);
+      ClassDef *cd=Doxygen::classSDict->find(l);
+      if (cd==0) continue;
+      // only entities are shown
+      if ((VhdlDocGen::VhdlClasses)cd->protection()!=VhdlDocGen::ENTITYCLASS)
+        continue;
+    }
+
     QCString imgExt = Config_getEnum("DOT_IMAGE_FORMAT");
     baseName.sprintf("inherit_graph_%d",count++);
     //baseName = convertNameToFile(baseName);

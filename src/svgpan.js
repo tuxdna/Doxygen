@@ -66,7 +66,7 @@ function show()
     windowWidth = 800;
     windowHeight = 600;
   }
-  minZoom = Math.min(windowHeight/viewHeight,windowWidth/viewWidth);
+  minZoom = Math.min(Math.min(viewHeight,windowHeight)/viewHeight,Math.min(viewWidth,windowWidth)/viewWidth);
   maxZoom = minZoom+1.5;
   zoomInFactor = Math.pow(maxZoom/minZoom,1.0/zoomSteps);
   zoomOutFactor = 1.0/zoomInFactor;
@@ -168,35 +168,21 @@ function doZoom(g,point,zoomFactor)
 function handleMouseWheel(evt) 
 {
   if (!evt) evt = window.evt;
+  if (!evt.shiftKey) return; // only zoom when shift is pressed
   if (evt.preventDefault) evt.preventDefault();
   evt.returnValue = false;
 
   if (state!='pan')
   {
-
     var delta;
-
-    if(evt.wheelDelta)
+    if (evt.wheelDelta)
     {
-      if (window.opera)
-      {
-        delta = evt.wheelDelta / 720; // Opera
-      }
-      else if (navigator.userAgent.toLowerCase().indexOf('chrome') > -1 ||
-               navigator.appVersion.indexOf("MSIE") != -1)
-      {
-        delta = evt.wheelDelta / 7200; // Chrome/IE9
-      }
-      else
-      {
-        delta = evt.wheelDelta / 72000; // Safari
-      }
+      delta = evt.wheelDelta / 7200; // Opera/Chrome/IE9/Safari
     }
     else
     {
       delta = evt.detail / -180; // Mozilla
     }
-
     var svgDoc = evt.target.ownerDocument;
     var g = svgDoc.getElementById("viewport");
     var p = getEventPoint(evt);
@@ -291,5 +277,43 @@ function handleZoom(evt,direction)
   p.y = windowHeight/2;
   doZoom(g,p,factor);
 }
+
+function serializeXmlNode(xmlNode) 
+{
+  if (typeof window.XMLSerializer != "undefined") {
+    return (new window.XMLSerializer()).serializeToString(xmlNode);
+  } else if (typeof xmlNode.xml != "undefined") {
+    return xmlNode.xml;
+  }
+  return "";
+}
+
+/** 
+ * Handler for print function
+ */
+function handlePrint(evt)
+{
+  evt.returnValue = false;
+  var g = svgDoc.getElementById("graph");
+  var xs = serializeXmlNode(g);
+  try {
+    var w = window.open('about:blank','_blank','width='+windowWidth+',height='+windowHeight+
+                        ',toolbar=0,status=0,menubar=0,scrollbars=0,resizable=0,location=0,directories=0');
+    var d = w.document;
+    d.write('<html xmlns="http://www.w3.org/1999/xhtml" '+
+            'xmlns:svg="http://www.w3.org/2000/svg" '+
+            'xmlns:xlink="http://www.w3.org/1999/xlink">');
+    d.write('<head><title>Print SVG</title></head>');
+    d.write('<body style="margin: 0px; padding: 0px;" onload="window.print();">');
+    d.write('<div id="svg" style="width:'+windowWidth+'px; height:'+windowHeight+'px;">'+xs+'</div>');
+    d.write('</body>');
+    d.write('</html>');
+    d.close();
+  } catch(e) {
+    alert('Failed to open popup window needed for printing!\n'+e.message);
+  }
+}
+
+
 
 

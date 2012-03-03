@@ -3,7 +3,7 @@
  *
  *
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  * Authors: Dimitri van Heesch, Miguel Lobo.
  *
  * Permission to use, copy, modify, and distribute this software and its
@@ -30,6 +30,7 @@
 #include <qdict.h>
 #include <qfile.h>
 #include "ftextstream.h"
+#include "arguments.h"
 
 #define PERLOUTPUT_MAX_INDENTATION 40
 
@@ -375,6 +376,8 @@ public:
   void visitPost(DocCopy *);
   void visitPre(DocText *);
   void visitPost(DocText *);
+  void visitPre(DocHtmlBlockQuote *);
+  void visitPost(DocHtmlBlockQuote *);
 
 private:
 
@@ -1300,6 +1303,18 @@ void PerlModDocVisitor::visitPost(DocText *)
 {
 }
 
+void PerlModDocVisitor::visitPre(DocHtmlBlockQuote *)
+{
+  openItem("blockquote");
+  openSubBlock("content");
+}
+
+void PerlModDocVisitor::visitPost(DocHtmlBlockQuote *)
+{
+  closeSubBlock();
+  closeItem();
+}
+
 static void addTemplateArgumentList(ArgumentList *al,PerlModOutput &output,const char *)
 {
   QCString indentStr;
@@ -1703,7 +1718,7 @@ void PerlModGenerator::generatePerlModForClass(ClassDef *cd)
     m_output.closeList();
   }
 
-  ClassSDict *cl = cd->getInnerClasses();
+  ClassSDict *cl = cd->getClassSDict();
   if (cl)
   {
     m_output.openList("inner");

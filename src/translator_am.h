@@ -2,7 +2,7 @@
  *
  * 
  *
- * Copyright (C) 1997-2011 by Dimitri van Heesch.
+ * Copyright (C) 1997-2012 by Dimitri van Heesch.
  *
  * Permission to use, copy, modify, and distribute this software and its
  * documentation under the terms of the GNU General Public License is hereby 
@@ -22,7 +22,7 @@
 #ifndef TRANSLATOR_AM_H
 #define TRANSLATOR_AM_H
 
-class TranslatorArmenian : public TranslatorAdapter_1_7_5
+class TranslatorArmenian : public Translator
 {
   public:
     /*! Used for identification of the language. */
